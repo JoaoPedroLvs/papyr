@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:papyr/files/files_screen.dart';
 import 'package:papyr/files/image_viewer.dart';
 import 'package:papyr/native.dart' as native;
 
@@ -12,12 +11,14 @@ class PdfViewer extends StatefulWidget {
   State<PdfViewer> createState() => _PdfViewerState();
 }
 
-class _PdfViewerState extends State<PdfViewer> {
+class _PdfViewerState extends State<PdfViewer> with ViewerGone {
   int? _count;
   int _page = 0;
   bool _zoomed = false;
   bool _failed = false;
-  bool _gone = false;
+
+  @override
+  native.MediaItem get item => widget.item;
 
   @override
   void initState() {
@@ -29,10 +30,9 @@ class _PdfViewerState extends State<PdfViewer> {
 
   /// not_found closes the viewer (once); anything else shows the error text.
   void _onError(Object e) {
-    if (!mounted || _gone) return;
+    if (!mounted) return;
     if (e is PlatformException && e.code == 'not_found') {
-      _gone = true;
-      closeGone(context);
+      gone();
     } else {
       setState(() => _failed = true);
     }
@@ -43,7 +43,7 @@ class _PdfViewerState extends State<PdfViewer> {
     final n = _count;
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: viewerBar(context, widget.item),
+      appBar: viewerBar(context, widget.item, delete),
       body: _failed
           ? const Center(child: Text('Não foi possível abrir o arquivo.', style: TextStyle(color: Colors.white)))
           : n == null

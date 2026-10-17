@@ -40,8 +40,19 @@ Future<bool> deleteItem(BuildContext context, native.MediaItem item) async {
 /// A viewer's file vanished (deleted in the gallery, for example): message, close, refresh.
 void closeGone(BuildContext context) {
   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O arquivo não existe mais.')));
-  Navigator.pop(context);
+  closeRoute(context);
   library.refresh();
+}
+
+/// Closes the route of [context] even when a dialog sits above it (a plain pop would close the dialog).
+void closeRoute(BuildContext context) {
+  final route = ModalRoute.of(context);
+  if (route == null || !route.isActive) return;
+  if (route.isCurrent) {
+    Navigator.pop(context);
+  } else {
+    Navigator.of(context).removeRoute(route);
+  }
 }
 
 class FilesScreen extends StatefulWidget {

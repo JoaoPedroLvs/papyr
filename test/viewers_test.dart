@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:papyr/files/files_screen.dart';
+import 'package:papyr/files/image_viewer.dart';
 import 'package:papyr/library.dart';
 
 import 'jpeg_fixtures.dart';
@@ -63,6 +66,39 @@ void main() {
     expect(calls.where((c) => c.method == 'delete').single.arguments, {'uri': 'content://i/1'});
     expect(find.byTooltip('Excluir'), findsNothing);
     expect(find.text('Arquivo excluído'), findsOneWidget);
+    expect(find.text('O arquivo não existe mais.'), findsNothing); // its own delete is not "gone"
+  });
+
+  testWidgets('a file deleted elsewhere while shown closes the viewer on the next list refresh', (t) async {
+    await openRow(t, 'Recibo.jpg');
+    expect(find.byType(ImageViewer), findsOneWidget);
+    handlers['list'] = (_) => [pdf]; // removed in the gallery; the resume refresh no longer lists it
+    await library.refresh();
+    await t.pumpAndSettle();
+    expect(find.byType(ImageViewer), findsNothing);
+    expect(find.text('O arquivo não existe mais.'), findsOneWidget);
+  });
+
+  testWidgets('a not_found that lands while the delete dialog is open closes the viewer, not the dialog', (t) async {
+    final read = Completer<Object?>();
+    handlers['read'] = (_) => read.future;
+    await t.pumpWidget(const MaterialApp(home: Scaffold(body: FilesScreen())));
+    await library.refresh();
+    await t.pumpAndSettle();
+    // The spinner keeps animating while read is pending, so no pumpAndSettle: pump, then let transitions finish.
+    Future<void> step() async {
+      await t.pump();
+      await t.pump(const Duration(seconds: 1));
+    }
+    await t.tap(find.text('Recibo.jpg'));
+    await step();
+    await t.tap(find.byTooltip('Excluir'));
+    await step();
+    expect(find.text('Excluir arquivo?'), findsOneWidget);
+    read.completeError(PlatformException(code: 'not_found'));
+    await step();
+    expect(find.byType(ImageViewer), findsNothing);
+    expect(find.byType(FilesScreen), findsOneWidget);
   });
 
   testWidgets('cancelling the delete keeps the viewer open', (t) async {
