@@ -15,6 +15,9 @@ class Photo {
 class Session extends ChangeNotifier {
   final photos = <Photo>[];
   Future<void> detecting = Future.value(); // the editor's detection pass; saving waits for it
+  // What the last Salvar used, so a trip back to the editor after a failure keeps it.
+  String? name;
+  bool? pdf;
 
   void add(Photo p) {
     photos.add(p);
@@ -28,6 +31,8 @@ class Session extends ChangeNotifier {
 
   void clear() {
     photos.clear();
+    name = null;
+    pdf = null;
     notifyListeners();
   }
 }

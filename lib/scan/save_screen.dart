@@ -110,8 +110,10 @@ class SaveScreen extends StatefulWidget {
 }
 
 class _SaveScreenState extends State<SaveScreen> {
-  final _name = TextEditingController(text: defaultName(DateTime.now()));
-  late SaveMode _mode = !_locked && session.photos.length > 1 ? SaveMode.pdf : SaveMode.images;
+  final _name = TextEditingController(text: session.name ?? defaultName(DateTime.now()));
+  late SaveMode _mode = _locked
+      ? SaveMode.images
+      : (session.pdf ?? session.photos.length > 1) ? SaveMode.pdf : SaveMode.images;
   _Stage _stage = _Stage.editing;
   String _status = '';
   SaveError? _error;
@@ -128,6 +130,9 @@ class _SaveScreenState extends State<SaveScreen> {
   bool get _locked => session.photos.any((p) => p.savedUri != null);
 
   Future<void> _save() async {
+    session
+      ..name = _name.text
+      ..pdf = _mode == SaveMode.pdf;
     final name = sanitizeName(_name.text, defaultName(DateTime.now()));
     setState(() {
       _stage = _Stage.processing;

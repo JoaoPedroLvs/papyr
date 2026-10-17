@@ -15,6 +15,7 @@ void main() {
     calls = [];
     failWarp = false;
     session.clear();
+    session.detecting = Future.value(); // a future from an earlier test's zone would never complete here
     tab.value = 1;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('papyr/native'), (c) async {
@@ -116,5 +117,22 @@ void main() {
     await settleIo(t);
     expect(calls.singleWhere((c) => c.method == 'warp').arguments['corners'], [0.1, 0.1, 0.9, 0.1, 0.9, 0.9, 0.1, 0.9]);
     expect(find.text('Salvo'), findsOneWidget);
+  });
+
+  testWidgets('name and format survive going back to the editor after a failure', (t) async {
+    session..add(Photo('/c/CAP0.jpg'))..add(Photo('/c/CAP1.jpg'));
+    failWarp = true;
+    await open(t);
+    await t.enterText(find.byType(TextField), 'Contrato');
+    await t.tap(find.text('Imagens'));
+    await t.pump();
+    await tapAndRun(t, 'Salvar');
+    expect(find.text('Falha ao processar a foto 1.'), findsOneWidget);
+    await t.binding.handlePopRoute(); // back to the editor, as the message suggests
+    await t.pumpAndSettle();
+    await t.tap(find.text('home'));
+    await t.pumpAndSettle();
+    expect(find.widgetWithText(TextField, 'Contrato'), findsOneWidget);
+    expect(selected(t), SaveMode.images);
   });
 }
