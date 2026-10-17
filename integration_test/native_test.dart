@@ -1,11 +1,22 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:papyr/native.dart' as native;
 
 final tinyJpeg = base64Decode('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABQb/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCKALXj/9k=');
+
+Future<String> twoColorPng() async {
+  final r = ui.PictureRecorder();
+  ui.Canvas(r)
+    ..drawRect(const ui.Rect.fromLTWH(0, 0, 200, 300), ui.Paint()..color = const ui.Color(0xFFFF0000))
+    ..drawRect(const ui.Rect.fromLTWH(200, 0, 200, 300), ui.Paint()..color = const ui.Color(0xFF0000FF));
+  final img = await r.endRecording().toImage(400, 300);
+  final png = (await img.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
+  return (File('${await native.cacheDir()}/papyr_src.png')..writeAsBytesSync(png)).path;
+}
 
 Matcher code(String c) => throwsA(isA<PlatformException>().having((e) => e.code, 'code', c));
 
@@ -43,6 +54,16 @@ void main() {
     await native.cleanCache();
     expect(files.map((f) => f.existsSync()), [false, false, false, true]);
     files.last.deleteSync();
+  });
+
+  testWidgets('preview returns upright full size and a downscaled JPEG', (t) async {
+    final src = await twoColorPng();
+    final p = await native.preview(src, 100);
+    expect((p.width, p.height), (400, 300));
+    expect(p.bytes.take(2), [0xFF, 0xD8]);
+    final f = (await (await ui.instantiateImageCodec(p.bytes)).getNextFrame()).image;
+    expect((f.width, f.height), (100, 75));
+    await expectLater(native.preview('/nope.jpg', 100), code('not_found'));
   });
 
   testWidgets('appVersion', (t) async {

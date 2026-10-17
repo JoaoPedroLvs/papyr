@@ -19,6 +19,8 @@ import io.flutter.plugin.common.StandardMethodCodec
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileNotFoundException
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 /** Error with an explicit channel code (memory | not_found | decode | io). */
 class Fail(val code: String, msg: String) : Exception(msg)
@@ -58,6 +60,7 @@ class MainActivity : FlutterActivity() {
         fun uri() = Uri.parse(str("uri"))
         return when (call.method) {
             "cacheDir" -> cacheDir.path
+            "preview" -> preview(str("path"), int("maxSide"))
             "save" -> save(str("path"), str("name"), str("mime"))
             "list" -> list()
             "delete" -> {
@@ -96,6 +99,21 @@ class MainActivity : FlutterActivity() {
         ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray()
     } finally {
         b.recycle()
+    }
+
+    /** ImageDecoder applies EXIF, so info.size is the upright full-resolution size. */
+    private fun preview(path: String, maxSide: Int): Map<String, Any> {
+        if (!File(path).exists()) throw FileNotFoundException(path)
+        var w = 0
+        var h = 0
+        val b = ImageDecoder.decodeBitmap(ImageDecoder.createSource(File(path))) { d, info, _ ->
+            w = info.size.width
+            h = info.size.height
+            val s = minOf(1f, maxSide.toFloat() / max(w, h))
+            d.setTargetSize(max(1, (w * s).roundToInt()), max(1, (h * s).roundToInt()))
+            d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+        return mapOf("bytes" to jpeg(b, 90), "width" to w, "height" to h)
     }
 
     private fun save(path: String, name: String, mime: String): Map<String, Any?> {

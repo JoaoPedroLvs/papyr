@@ -39,6 +39,12 @@ Future<void> delete(String uri) => _ch.invokeMethod('delete', {'uri': uri});
 
 Future<Uint8List> read(String uri) async => (await _ch.invokeMethod<Uint8List>('read', {'uri': uri}))!;
 
+/// Downscaled JPEG of a capture plus its upright full-resolution size.
+Future<({Uint8List bytes, int width, int height})> preview(String path, int maxSide) async {
+  final m = _map(await _ch.invokeMethod('preview', {'path': path, 'maxSide': maxSide}));
+  return (bytes: m['bytes'] as Uint8List, width: (m['width'] as num).toInt(), height: (m['height'] as num).toInt());
+}
+
 Future<Uint8List> thumbnail(String uri, String mime, int size) async =>
     (await _ch.invokeMethod<Uint8List>('thumbnail', {'uri': uri, 'mime': mime, 'size': size}))!;
 
