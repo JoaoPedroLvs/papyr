@@ -1,12 +1,16 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:papyr/main.dart' show tab;
 import 'package:papyr/native.dart' as native;
 
 import 'crop_screen.dart';
+import 'detector.dart';
+import 'luma.dart';
 import 'session.dart';
 
 // The plugin is a singleton whose dispose unbinds whatever camera is current,
@@ -14,6 +18,25 @@ import 'session.dart';
 Future<void> _cameraGate = Future.value();
 bool _torchOn = false; // lasts while the app lives
 final _flashUnits = <String, bool>{}; // camera id -> has a flash unit
+
+/// Sends its port, then answers every (gray, w, h) with detectQuad: a missing reply would leave the camera busy.
+void _detectWorker(SendPort out) {
+  final rx = ReceivePort();
+  out.send(rx.sendPort);
+  rx.listen((m) {
+    final (gray, w, h) = m as (Uint8List, int, int);
+    List<double>? q;
+    try {
+      q = detectQuad(gray, w, h);
+    } catch (_) {}
+    out.send(q);
+  });
+}
+
+/// Spec 6.3.4: EMA over the aligned corners on a hit; the outline goes after 5 misses in a row.
+({List<double>? quad, int misses}) trackQuad(List<double>? prev, int misses, List<double>? q) => q != null
+    ? (quad: prev == null ? q : smoothQuad(prev, q), misses: 0)
+    : (quad: misses + 1 >= 5 ? null : prev, misses: misses + 1);
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -32,11 +55,28 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   bool _hasFlash = false;
   String? _err; // CameraException code that stopped the start
   final _thumbs = <String, Future<({Uint8List bytes, int width, int height})>>{};
+  final _rx = ReceivePort();
+  Isolate? _isolate;
+  SendPort? _worker;
+  CameraController? _busy; // whose frame the detector has
+  List<double>? _quad;
+  int _misses = 0;
+  bool _loggedSize = false;
+  int _replies = 0;
+  final _clock = Stopwatch()..start();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _rx.listen(_onReply);
+    Isolate.spawn(_detectWorker, _rx.sendPort).then((i) {
+      if (mounted) {
+        _isolate = i;
+      } else {
+        i.kill();
+      }
+    }, onError: (_) {}); // no worker, no outline
     _start();
   }
 
@@ -44,6 +84,8 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stop(rebuild: false);
+    _isolate?.kill();
+    _rx.close();
     super.dispose();
   }
 
@@ -73,9 +115,13 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     final c = _c;
     if (c == null) return;
     if (rebuild) {
-      setState(() => _c = null);
+      setState(() {
+        _c = null;
+        _quad = null;
+      });
     } else {
       _c = null;
+      _quad = null;
     }
     _dispose(c);
   }
@@ -138,6 +184,34 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
   void _onFrame(CameraController c, CameraImage img) {
     if (!identical(c, _c)) return; // frames can arrive after dispose()
+    if (kDebugMode && !_loggedSize) {
+      _loggedSize = true;
+      debugPrint('analysis ${img.width}x${img.height} vs preview ${c.value.previewSize}');
+    }
+    final w = _worker;
+    if (_busy != null || w == null || c.value.isTakingPicture) return;
+    final p = img.planes[0];
+    final g = uprightLuma(p.bytes, p.bytesPerRow, img.width, img.height, c.description.sensorOrientation);
+    if (g == null) return;
+    _busy = c;
+    w.send(g);
+  }
+
+  void _onReply(Object? m) {
+    if (m is SendPort) {
+      _worker = m;
+      return;
+    }
+    final c = _busy;
+    _busy = null; // always: a stopped controller must not leave it set
+    if (kDebugMode && ++_replies % 30 == 0) {
+      debugPrint('detector: ${(30e6 / _clock.elapsedMicroseconds).toStringAsFixed(1)} upd/s');
+      _clock.reset();
+    }
+    if (!identical(c, _c)) return; // stopped or replaced while detecting
+    final t = trackQuad(_quad, _misses, m as List<double>?);
+    _misses = t.misses;
+    if (!identical(t.quad, _quad)) setState(() => _quad = t.quad);
   }
 
   void _retry() {
@@ -221,7 +295,10 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         return Stack(
           fit: StackFit.expand,
           children: [
-            ColoredBox(color: Colors.black, child: Center(child: CameraPreview(c))),
+            ColoredBox(
+              color: Colors.black,
+              child: Center(child: CameraPreview(c, child: CustomPaint(painter: QuadPainter(_quad)))),
+            ),
             IgnorePointer(
               child: AnimatedOpacity(
                 opacity: _flash ? 1 : 0,
@@ -407,4 +484,29 @@ class _Shutter extends StatelessWidget {
       ),
     );
   }
+}
+
+class QuadPainter extends CustomPainter {
+  QuadPainter(this.q);
+  final List<double>? q; // 8 doubles TL,TR,BR,BL, upright-normalized
+
+  @override
+  void paint(Canvas canvas, Size s) {
+    final q = this.q;
+    if (q == null) return;
+    final p = Path()..moveTo(q[0] * s.width, q[1] * s.height);
+    for (var i = 2; i < 8; i += 2) {
+      p.lineTo(q[i] * s.width, q[i + 1] * s.height);
+    }
+    canvas.drawPath(
+      p..close(),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..color = const Color(0xFF00E676),
+    );
+  }
+
+  @override
+  bool shouldRepaint(QuadPainter o) => o.q != q;
 }

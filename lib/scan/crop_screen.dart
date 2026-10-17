@@ -1,10 +1,13 @@
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:papyr/native.dart' as native;
 
+import 'detector.dart';
 import 'save_screen.dart';
 import 'session.dart';
 
@@ -22,6 +25,21 @@ bool isConvex(List<double> q) {
     sign = s;
   }
   return true;
+}
+
+/// Spec 6.4: decodes [jpeg] ([w]x[h] upright) at 320 px on the long side, grays it and detects off the UI isolate.
+Future<List<double>?> _detectJpeg(Uint8List jpeg, int w, int h) async {
+  final codec = await ui.instantiateImageCodec(jpeg, targetWidth: w >= h ? 320 : null, targetHeight: h > w ? 320 : null);
+  final image = (await codec.getNextFrame()).image;
+  codec.dispose();
+  final iw = image.width, ih = image.height;
+  final rgba = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint8List();
+  image.dispose();
+  final gray = Uint8List(iw * ih);
+  for (var i = 0; i < gray.length; i++) {
+    gray[i] = (rgba[4 * i] * 77 + rgba[4 * i + 1] * 150 + rgba[4 * i + 2] * 29) >> 8;
+  }
+  return Isolate.run(() => detectQuad(gray, iw, ih));
 }
 
 class CropScreen extends StatefulWidget {
@@ -141,6 +159,21 @@ class _CropPageState extends State<_CropPage> with AutomaticKeepAliveClientMixin
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.photo.detected == null) _detect();
+  }
+
+  /// Once per photo; never touches corners, so a drag made meanwhile wins.
+  Future<void> _detect() async {
+    try {
+      final img = await _preview;
+      final q = await _detectJpeg(img.bytes, img.width, img.height);
+      if (q != null && mounted) setState(() => widget.photo.detected = q);
+    } catch (_) {} // no prefill; a preview failure already shows in build
+  }
 
   List<double> get _quad => widget.photo.corners ?? widget.photo.detected ?? fullQuad;
 
