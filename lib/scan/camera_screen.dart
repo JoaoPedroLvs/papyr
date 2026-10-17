@@ -349,6 +349,10 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 builder: (context, _) {
                   final n = session.photos.length;
                   return FilledButton(
+                    style: FilledButton.styleFrom(
+                      disabledBackgroundColor: Colors.white12,
+                      disabledForegroundColor: Colors.white38,
+                    ),
                     onPressed: n == 0 || _navigating ? null : _openEditor,
                     child: Text('Concluir ($n)'),
                   );
