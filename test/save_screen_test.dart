@@ -76,4 +76,19 @@ void main() {
     await tapAndRun(t, 'Tentar de novo');
     expect(find.text('Salvo'), findsOneWidget);
   });
+
+  SaveMode selected(WidgetTester t) => t.widget<SegmentedButton<SaveMode>>(find.byType(SegmentedButton<SaveMode>)).selected.single;
+
+  testWidgets('starts in PDF with more than one photo', (t) async {
+    session..add(Photo('/c/CAP0.jpg'))..add(Photo('/c/CAP1.jpg'));
+    await open(t);
+    expect(selected(t), SaveMode.pdf);
+  });
+
+  testWidgets('after a partial Imagens save the format is Imagens and locked', (t) async {
+    session..add(Photo('/c/CAP0.jpg')..savedUri = 'content://x/1')..add(Photo('/c/CAP1.jpg'));
+    await open(t);
+    expect(selected(t), SaveMode.images);
+    expect(t.widget<SegmentedButton<SaveMode>>(find.byType(SegmentedButton<SaveMode>)).onSelectionChanged, isNull);
+  });
 }

@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:papyr/scan/save_screen.dart';
 import 'package:papyr/scan/session.dart';
 
-const warpBytes = [1, 2, 3];
+import 'jpeg_fixtures.dart';
+
+final warpBytes = fakeJpeg(40, 400);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -81,5 +84,29 @@ void main() {
     expect(w[1]['corners'], ps[1].detected);
     expect(w[2]['corners'], [0, 0, 1, 0, 1, 1, 0, 1]);
     expect(w[2]['rotation'], 90);
+  });
+
+  test('pdf: one file from all photos, status sequence, temps deleted', () async {
+    final status = <String>[];
+    String? head;
+    fail = (c) {
+      if (c.method == 'save') head = latin1.decode(File(c.arguments['path']).readAsBytesSync().take(8).toList());
+      return null;
+    };
+    final uris = await runSave(photos: photos(2), name: 'Doc', mode: SaveMode.pdf, onStatus: status.add);
+    expect(uris, ['content://x/1']);
+    final save = calls.singleWhere((c) => c.method == 'save').arguments;
+    expect((save['name'], save['mime']), ('Doc.pdf', 'application/pdf'));
+    expect(head, '%PDF-1.4');
+    expect(status, ['Processando 1/2', 'Processando 2/2', 'Gravando PDF…']);
+    expect(temps(), isEmpty);
+  });
+
+  test('pdf: warp failure aborts the writer and leaves nothing behind', () async {
+    fail = (c) => c.method == 'warp' && c.arguments['path'].endsWith('CAP1.jpg') ? PlatformException(code: 'decode') : null;
+    await expectLater(runSave(photos: photos(2), name: 'Doc', mode: SaveMode.pdf, onStatus: (_) {}),
+        throwsA(isA<SaveError>().having((e) => e.index, 'index', 1).having((e) => e.code, 'code', 'decode')));
+    expect(temps(), isEmpty);
+    expect(calls.where((c) => c.method == 'save'), isEmpty);
   });
 }

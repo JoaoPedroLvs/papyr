@@ -6,6 +6,7 @@ import 'package:papyr/format.dart';
 import 'package:papyr/library.dart';
 import 'package:papyr/main.dart' show tab;
 import 'package:papyr/native.dart' as native;
+import 'package:papyr/pdf_writer.dart';
 
 import 'crop_screen.dart';
 import 'session.dart';
@@ -36,7 +37,7 @@ Future<List<String>> runSave({
   required SaveMode mode,
   required void Function(String status) onStatus,
 }) async {
-  if (mode == SaveMode.pdf) throw UnimplementedError();
+  if (mode == SaveMode.pdf) return [await _savePdf(photos, name, onStatus)];
   final n = photos.length;
   for (var i = 0; i < n; i++) {
     final p = photos[i];
@@ -58,6 +59,47 @@ Future<List<String>> runSave({
   return [for (final p in photos) p.savedUri!];
 }
 
+/// Page by page, deleting each warped JPEG right after it is appended (disk peak ~2x, not 3x).
+Future<String> _savePdf(List<Photo> photos, String name, void Function(String status) onStatus) async {
+  final n = photos.length;
+  String out;
+  try {
+    out = '${await native.cacheDir()}/papyr_out.pdf';
+  } on PlatformException catch (e) {
+    throw SaveError(null, e.code);
+  }
+  final w = PdfWriter.open(out, pageCount: n);
+  int? index = 0;
+  try {
+    for (var i = 0; i < n; i++) {
+      index = i;
+      final p = photos[i];
+      onStatus('Processando ${i + 1}/$n');
+      final tmp = (await native.warp(p.path, p.corners ?? p.detected ?? fullQuad, p.rotation)).path;
+      try {
+        await w.addPage(tmp);
+      } finally {
+        await _deleteQuietly(tmp);
+      }
+    }
+    index = null;
+    onStatus('Gravando PDF…');
+    await w.close();
+    return (await native.save(out, '$name.pdf', 'application/pdf')).uri;
+  } on PlatformException catch (e) {
+    await w.abort();
+    throw SaveError(index, e.code);
+  } on FormatException {
+    await w.abort();
+    throw SaveError(index, 'decode');
+  } catch (_) {
+    await w.abort();
+    throw SaveError(index, 'io');
+  } finally {
+    await _deleteQuietly(out);
+  }
+}
+
 enum _Stage { editing, processing, done, error }
 
 class SaveScreen extends StatefulWidget {
@@ -69,7 +111,7 @@ class SaveScreen extends StatefulWidget {
 
 class _SaveScreenState extends State<SaveScreen> {
   final _name = TextEditingController(text: defaultName(DateTime.now()));
-  SaveMode _mode = SaveMode.images;
+  late SaveMode _mode = !_locked && session.photos.length > 1 ? SaveMode.pdf : SaveMode.images;
   _Stage _stage = _Stage.editing;
   String _status = '';
   SaveError? _error;
@@ -169,7 +211,7 @@ class _SaveScreenState extends State<SaveScreen> {
         SegmentedButton<SaveMode>(
           segments: const [
             ButtonSegment(value: SaveMode.images, label: Text('Imagens')),
-            ButtonSegment(value: SaveMode.pdf, label: Text('PDF'), enabled: false),
+            ButtonSegment(value: SaveMode.pdf, label: Text('PDF')),
           ],
           selected: {_mode},
           onSelectionChanged: _locked ? null : (s) => setState(() => _mode = s.first),
