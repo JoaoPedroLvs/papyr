@@ -56,6 +56,9 @@ Future<Uint8List> thumbnail(String uri, String mime, int size) async =>
 
 Future<void> share(List<String> uris, String mime) => _ch.invokeMethod('share', {'uris': uris, 'mime': mime});
 
+/// Whether the camera (Camera2 id = CameraDescription.name) has a flash unit for the torch.
+Future<bool> hasFlash(String cameraId) async => (await _ch.invokeMethod<bool>('hasFlash', {'cameraId': cameraId}))!;
+
 Future<void> openAppSettings() => _ch.invokeMethod('openAppSettings');
 
 Future<String> appVersion() async => (await _ch.invokeMethod<String>('appVersion'))!;

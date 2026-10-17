@@ -12,6 +12,7 @@ import 'session.dart';
 // so every dispose joins this chain and every creation waits for it.
 Future<void> _cameraGate = Future.value();
 bool _torchOn = false; // lasts while the app lives
+final _flashUnits = <String, bool>{}; // camera id -> has a flash unit
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -27,6 +28,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   bool _openedSettings = false;
   bool _flash = false;
   bool _navigating = false;
+  bool _hasFlash = false;
   String? _err; // CameraException code that stopped the start
   final _thumbs = <String, Future<({Uint8List bytes, int width, int height})>>{};
 
@@ -86,17 +88,24 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       await _cameraGate;
       final cams = await availableCameras();
       final back = cams.firstWhere((d) => d.lensDirection == CameraLensDirection.back, orElse: () => cams.first);
+      // Without a flash unit the plugin reports the torch failure as a camera error, not an exception.
+      final hasFlash = _flashUnits[back.name] ??= await native.hasFlash(back.name).catchError((_) => false);
       c = CameraController(back, ResolutionPreset.max, enableAudio: false, imageFormatGroup: ImageFormatGroup.yuv420);
       await c.initialize();
       await c.lockCaptureOrientation(DeviceOrientation.portraitUp);
-      // off first, always: the plugin keeps a stale torch flag across controllers.
-      await _setFlash(c, FlashMode.off);
-      if (_torchOn) await _setFlash(c, FlashMode.torch);
+      if (hasFlash) {
+        // off first, always: the plugin keeps a stale torch flag across controllers.
+        await _setFlash(c, FlashMode.off);
+        if (_torchOn) await _setFlash(c, FlashMode.torch);
+      }
       if (!mounted || _background || !_onTop) {
         _dispose(c);
         return;
       }
-      setState(() => _c = c);
+      setState(() {
+        _c = c;
+        _hasFlash = hasFlash;
+      });
       await c.startImageStream((img) => _onFrame(c!, img));
     } on CameraException catch (e) {
       _fail(c, e.code);
@@ -136,6 +145,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   }
 
   Future<void> _toggleTorch() async {
+    if (!_hasFlash) return;
     setState(() => _torchOn = !_torchOn);
     final c = _c;
     if (c != null) await _setFlash(c, _torchOn ? FlashMode.torch : FlashMode.off);
@@ -329,8 +339,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 iconSize: 28,
                 color: Colors.white,
                 tooltip: 'Lanterna',
-                onPressed: _toggleTorch,
-                icon: Icon(_torchOn ? Icons.flashlight_on : Icons.flashlight_off),
+                disabledColor: Colors.white24,
+                onPressed: _hasFlash ? _toggleTorch : null,
+                icon: Icon(_torchOn && _hasFlash ? Icons.flashlight_on : Icons.flashlight_off),
               ),
             ),
           ),

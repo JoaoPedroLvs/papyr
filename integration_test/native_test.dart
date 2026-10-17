@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -89,6 +90,12 @@ void main() {
     expect((await px(img, 150, 390))[2], greaterThan(200)); // base = antiga direita (azul)
     await expectLater(native.warp(src, [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], 0), code('decode'));
     await expectLater(native.warp('/nope.jpg', fullQuad, 0), code('not_found'));
+  });
+
+  testWidgets('hasFlash reads the camera characteristics', (t) async {
+    final back = (await availableCameras()).firstWhere((c) => c.lensDirection == CameraLensDirection.back);
+    // This AVD's virtual back camera has no flash unit: enabling the torch fails with "No flash unit".
+    expect(await native.hasFlash(back.name), isFalse);
   });
 
   testWidgets('appVersion', (t) async {

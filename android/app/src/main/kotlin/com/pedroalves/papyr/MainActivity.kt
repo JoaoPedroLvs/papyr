@@ -11,6 +11,8 @@ import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.net.Uri
 import android.provider.MediaStore
 import android.provider.MediaStore.MediaColumns
@@ -83,6 +85,8 @@ class MainActivity : FlutterActivity() {
                 share(call.argument<List<String>>("uris")!!.map(Uri::parse), str("mime"))
                 null
             }
+            "hasFlash" -> (getSystemService(CAMERA_SERVICE) as CameraManager)
+                .getCameraCharacteristics(str("cameraId")).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
             "openAppSettings" -> {
                 runOnUiThread {
                     startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
