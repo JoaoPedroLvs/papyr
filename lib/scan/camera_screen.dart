@@ -13,8 +13,8 @@ import 'detector.dart';
 import 'luma.dart';
 import 'session.dart';
 
-// The plugin is a singleton whose dispose unbinds whatever camera is current,
-// so every dispose joins this chain and every creation waits for it.
+// The plugin is a singleton whose dispose unbinds whatever camera is current, so each
+// creation holds this chain until it is done, and every dispose joins it.
 Future<void> _cameraGate = Future.value();
 bool _torchOn = false; // lasts while the app lives
 final _flashUnits = <String, bool>{}; // camera id -> has a flash unit
@@ -53,6 +53,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   bool _flash = false;
   bool _navigating = false;
   bool _hasFlash = false;
+  bool _torchBusy = false;
   String? _err; // CameraException code that stopped the start
   final _thumbs = <String, Future<({Uint8List bytes, int width, int height})>>{};
   final _rx = ReceivePort();
@@ -98,15 +99,13 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         _stop();
       case AppLifecycleState.resumed:
         _background = false;
-        if (!mounted || !_onTop) return;
+        if (!mounted || _navigating) return; // editor/save on top; a dialog does not count
         if (_err == 'CameraAccessDenied' && !_openedSettings) return; // no dialog loop when denied
         _openedSettings = false;
         _start();
       default:
     }
   }
-
-  bool get _onTop => ModalRoute.of(context)?.isCurrent ?? true;
 
   void _dispose(CameraController c) => _cameraGate = _cameraGate.then((_) => c.dispose()).catchError((_) {});
 
@@ -130,9 +129,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     if (_c != null || _starting) return;
     _starting = true;
     if (_err != null) setState(() => _err = null);
+    final prev = _cameraGate;
+    final done = Completer<void>();
+    _cameraGate = done.future;
     CameraController? c;
     try {
-      await _cameraGate;
+      await prev;
       final cams = await availableCameras();
       final back = cams.firstWhere((d) => d.lensDirection == CameraLensDirection.back, orElse: () => cams.first);
       // Without a flash unit the plugin reports the torch failure as a camera error, not an exception.
@@ -145,8 +147,8 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         await _setFlash(c, FlashMode.off);
         if (_torchOn) await _setFlash(c, FlashMode.torch);
       }
-      if (!mounted || _background || !_onTop) {
-        _dispose(c);
+      if (!mounted || _background || _navigating) {
+        await _disposeQuietly(c); // inline: this creation still holds the gate
         return;
       }
       setState(() {
@@ -155,20 +157,36 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       });
       await c.startImageStream((img) => _onFrame(c!, img));
     } on CameraException catch (e) {
-      _fail(c, e.code);
+      await _fail(c, e.code);
     } catch (e) {
-      _fail(c, 'error');
+      await _fail(c, 'error');
     } finally {
       _starting = false;
+      done.complete();
     }
   }
 
-  void _fail(CameraController? c, String code) {
-    if (identical(c, _c)) {
-      if (mounted) _stop();
-    } else if (c != null) {
-      _dispose(c);
+  Future<void> _disposeQuietly(CameraController c) async {
+    try {
+      await c.dispose();
+    } catch (_) {
+      // already gone
     }
+  }
+
+  /// Runs inside the creation, so the dispose is awaited here rather than queued behind the next creation.
+  Future<void> _fail(CameraController? c, String code) async {
+    if (c != null && identical(c, _c)) {
+      if (mounted) {
+        setState(() {
+          _c = null;
+          _quad = null;
+        });
+      } else {
+        _c = null;
+      }
+    }
+    if (c != null) await _disposeQuietly(c);
     if (code == 'CameraPermissionsRequestOngoing' || !mounted) return;
     setState(() => _err = code);
   }
@@ -219,16 +237,22 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     _start();
   }
 
+  /// One torch change at a time: overlapping calls race on the plugin's torch flag.
   Future<void> _toggleTorch() async {
-    if (!_hasFlash) return;
-    setState(() => _torchOn = !_torchOn);
     final c = _c;
-    if (c != null) await _setFlash(c, _torchOn ? FlashMode.torch : FlashMode.off);
+    if (!_hasFlash || _torchBusy || c == null) return;
+    _torchBusy = true;
+    setState(() => _torchOn = !_torchOn);
+    try {
+      await _setFlash(c, _torchOn ? FlashMode.torch : FlashMode.off);
+    } finally {
+      _torchBusy = false;
+    }
   }
 
   /// Camera off (torch and stream too) while the editor and save screens are on top.
   Future<void> _openEditor() async {
-    if (_navigating) return;
+    if (_navigating || (_c?.value.isTakingPicture ?? false)) return; // stopping now would abort the shot
     setState(() => _navigating = true);
     _stop();
     await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => const CropScreen()));
@@ -418,7 +442,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 color: Colors.white,
                 tooltip: 'Lanterna',
                 disabledColor: Colors.white24,
-                onPressed: _hasFlash ? _toggleTorch : null,
+                onPressed: _hasFlash && c != null ? _toggleTorch : null,
                 icon: Icon(_torchOn && _hasFlash ? Icons.flashlight_on : Icons.flashlight_off),
               ),
             ),
@@ -434,15 +458,16 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             child: Align(
               alignment: Alignment.centerRight,
               child: ListenableBuilder(
-                listenable: session,
+                listenable: Listenable.merge([session, ?c]),
                 builder: (context, _) {
                   final n = session.photos.length;
+                  final shooting = c?.value.isTakingPicture ?? false;
                   return FilledButton(
                     style: FilledButton.styleFrom(
                       disabledBackgroundColor: Colors.white12,
                       disabledForegroundColor: Colors.white38,
                     ),
-                    onPressed: n == 0 || _navigating ? null : _openEditor,
+                    onPressed: n == 0 || _navigating || shooting ? null : _openEditor,
                     child: Text('Concluir ($n)'),
                   );
                 },
