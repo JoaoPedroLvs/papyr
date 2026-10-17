@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:papyr/native.dart' as native;
+import 'package:papyr/scan/crop_screen.dart' show fullQuad;
 
 final tinyJpeg = base64Decode('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABQb/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCKALXj/9k=');
 
@@ -64,6 +65,30 @@ void main() {
     final f = (await (await ui.instantiateImageCodec(p.bytes)).getNextFrame()).image;
     expect((f.width, f.height), (100, 75));
     await expectLater(native.preview('/nope.jpg', 100), code('not_found'));
+  });
+
+  testWidgets('warp crops, rotates clockwise and rejects degenerate corners', (t) async {
+    final src = await twoColorPng();
+    Future<ui.Image> decode(String p) async =>
+        (await (await ui.instantiateImageCodec(File(p).readAsBytesSync())).getNextFrame()).image;
+    Future<List<int>> px(ui.Image i, int x, int y) async {
+      final b = (await i.toByteData())!;
+      final o = (y * i.width + x) * 4;
+      return [b.getUint8(o), b.getUint8(o + 1), b.getUint8(o + 2)];
+    }
+    final full = await native.warp(src, fullQuad, 0);
+    expect((full.width, full.height), (400, 300));
+    expect(File(full.path).readAsBytesSync().take(2), [0xFF, 0xD8]);
+    expect(full.path.split('/').last, startsWith('papyr_w_'));
+    final half = await native.warp(src, [0, 0, 0.5, 0, 0.5, 0.5, 0, 0.5], 0);
+    expect((half.width, half.height), (200, 150));
+    final rot = await native.warp(src, fullQuad, 90);
+    expect((rot.width, rot.height), (300, 400));
+    final img = await decode(rot.path);
+    expect((await px(img, 150, 10))[0], greaterThan(200)); // topo = antiga esquerda (vermelho)
+    expect((await px(img, 150, 390))[2], greaterThan(200)); // base = antiga direita (azul)
+    await expectLater(native.warp(src, [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], 0), code('decode'));
+    await expectLater(native.warp('/nope.jpg', fullQuad, 0), code('not_found'));
   });
 
   testWidgets('appVersion', (t) async {

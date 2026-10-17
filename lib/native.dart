@@ -45,6 +45,12 @@ Future<({Uint8List bytes, int width, int height})> preview(String path, int maxS
   return (bytes: m['bytes'] as Uint8List, width: (m['width'] as num).toInt(), height: (m['height'] as num).toInt());
 }
 
+/// Perspective crop at full resolution into a cache JPEG; width/height are after the clockwise [rotation].
+Future<({String path, int width, int height})> warp(String path, List<double> corners, int rotation) async {
+  final m = _map(await _ch.invokeMethod('warp', {'path': path, 'corners': corners, 'rotation': rotation}));
+  return (path: m['path'] as String, width: (m['width'] as num).toInt(), height: (m['height'] as num).toInt());
+}
+
 Future<Uint8List> thumbnail(String uri, String mime, int size) async =>
     (await _ch.invokeMethod<Uint8List>('thumbnail', {'uri': uri, 'mime': mime, 'size': size}))!;
 

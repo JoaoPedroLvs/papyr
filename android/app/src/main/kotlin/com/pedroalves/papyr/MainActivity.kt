@@ -5,7 +5,12 @@ import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.ImageDecoder
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.RectF
 import android.net.Uri
 import android.provider.MediaStore
 import android.provider.MediaStore.MediaColumns
@@ -19,6 +24,7 @@ import io.flutter.plugin.common.StandardMethodCodec
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileNotFoundException
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -61,6 +67,7 @@ class MainActivity : FlutterActivity() {
         return when (call.method) {
             "cacheDir" -> cacheDir.path
             "preview" -> preview(str("path"), int("maxSide"))
+            "warp" -> warp(str("path"), call.argument<List<*>>("corners")!!.map { (it as Number).toFloat() }, int("rotation"))
             "save" -> save(str("path"), str("name"), str("mime"))
             "list" -> list()
             "delete" -> {
@@ -114,6 +121,53 @@ class MainActivity : FlutterActivity() {
             d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
         }
         return mapOf("bytes" to jpeg(b, 90), "width" to w, "height" to h)
+    }
+
+    /**
+     * Perspective crop at full resolution (spec 5.4). [c] is TL,TR,BR,BL normalized in upright space
+     * (ImageDecoder applies EXIF); [rotation] is clockwise and folded into the same matrix, so only
+     * two bitmaps ever exist.
+     */
+    private fun warp(path: String, c: List<Float>, rotation: Int): Map<String, Any> {
+        if (!File(path).exists()) throw FileNotFoundException(path)
+        // HARDWARE bitmaps cannot be drawn on a software Canvas.
+        val src = ImageDecoder.decodeBitmap(ImageDecoder.createSource(File(path))) { d, _, _ ->
+            d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+        var out: Bitmap? = null
+        try {
+            val p = FloatArray(8) { i -> c[i] * if (i % 2 == 0) src.width else src.height }
+            fun d(a: Int, b: Int) = hypot(p[2 * a] - p[2 * b], p[2 * a + 1] - p[2 * b + 1])
+            val ow = max(d(0, 1), d(3, 2)).roundToInt()
+            val oh = max(d(0, 3), d(1, 2)).roundToInt()
+            val m = Matrix()
+            if (ow < 2 || oh < 2 ||
+                !m.setPolyToPoly(p, 0, floatArrayOf(0f, 0f, ow.toFloat(), 0f, ow.toFloat(), oh.toFloat(), 0f, oh.toFloat()), 0, 4)
+            ) throw Fail("decode", "degenerate corners")
+            val rot = Matrix().apply { setRotate(rotation.toFloat()) }
+            val bounds = RectF(0f, 0f, ow.toFloat(), oh.toFloat()).also { rot.mapRect(it) }
+            rot.postTranslate(-bounds.left, -bounds.top)
+            m.postConcat(rot)
+            out = Bitmap.createBitmap(bounds.width().roundToInt(), bounds.height().roundToInt(), Bitmap.Config.ARGB_8888)
+            Canvas(out).apply {
+                drawColor(Color.WHITE)
+                drawBitmap(src, m, Paint(Paint.FILTER_BITMAP_FLAG))
+            }
+            src.recycle()
+            val f = File(cacheDir, "papyr_w_${System.nanoTime()}.jpg")
+            try {
+                f.outputStream().buffered(1 shl 16).use {
+                    if (!out.compress(Bitmap.CompressFormat.JPEG, 100, it)) throw Fail("io", "compress failed")
+                }
+            } catch (e: Throwable) {
+                f.delete()
+                throw e
+            }
+            return mapOf("path" to f.path, "width" to out.width, "height" to out.height)
+        } finally {
+            src.recycle()
+            out?.recycle()
+        }
     }
 
     private fun save(path: String, name: String, mime: String): Map<String, Any?> {
