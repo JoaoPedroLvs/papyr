@@ -134,6 +134,7 @@ class _SaveScreenState extends State<SaveScreen> {
       _status = '';
     });
     try {
+      await session.detecting; // photos never shown in the editor may still be detecting
       final uris = await runSave(
         photos: List.of(session.photos),
         name: name,

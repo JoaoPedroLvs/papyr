@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,11 +43,19 @@ void main() {
     await t.pumpAndSettle();
   }
 
-  // runSave deletes its temp file with real I/O, which never completes inside FakeAsync.
+  // runSave deletes its temp file with real I/O, which never completes inside FakeAsync:
+  // alternate fake pumps (channel replies) with real time (file deletes).
+  Future<void> settleIo(WidgetTester t) async {
+    for (var i = 0; i < 10; i++) {
+      await t.pump();
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    }
+    await t.pumpAndSettle();
+  }
+
   Future<void> tapAndRun(WidgetTester t, String label) async {
     await t.tap(find.widgetWithText(FilledButton, label));
-    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
-    await t.pumpAndSettle();
+    await settleIo(t);
   }
 
   testWidgets('one photo: saves as image, clears the session and back acts like Concluir', (t) async {
@@ -90,5 +100,21 @@ void main() {
     await open(t);
     expect(selected(t), SaveMode.images);
     expect(t.widget<SegmentedButton<SaveMode>>(find.byType(SegmentedButton<SaveMode>)).onSelectionChanged, isNull);
+  });
+
+  testWidgets('saving waits for the editor detection still running', (t) async {
+    final pending = Completer<void>();
+    session
+      ..add(Photo('/c/CAP0.jpg'))
+      ..detecting = pending.future;
+    await open(t);
+    await t.tap(find.widgetWithText(FilledButton, 'Salvar'));
+    await t.pump();
+    expect(calls.where((c) => c.method == 'warp'), isEmpty);
+    session.photos.single.detected = [0.1, 0.1, 0.9, 0.1, 0.9, 0.9, 0.1, 0.9];
+    pending.complete();
+    await settleIo(t);
+    expect(calls.singleWhere((c) => c.method == 'warp').arguments['corners'], [0.1, 0.1, 0.9, 0.1, 0.9, 0.9, 0.1, 0.9]);
+    expect(find.text('Salvo'), findsOneWidget);
   });
 }

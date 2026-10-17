@@ -62,7 +62,7 @@ class _CropScreenState extends State<CropScreen> {
   @override
   void initState() {
     super.initState();
-    _detectAll();
+    session.detecting = _detectAll();
   }
 
   /// Spec 6.4: once per photo, every photo of the session (save uses `detected` for pages never shown).

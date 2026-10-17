@@ -14,6 +14,7 @@ class Photo {
 
 class Session extends ChangeNotifier {
   final photos = <Photo>[];
+  Future<void> detecting = Future.value(); // the editor's detection pass; saving waits for it
 
   void add(Photo p) {
     photos.add(p);
