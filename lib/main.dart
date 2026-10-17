@@ -4,6 +4,7 @@ import 'package:papyr/library.dart';
 import 'package:papyr/native.dart' as native;
 import 'package:papyr/scan/camera_screen.dart';
 import 'package:papyr/scan/session.dart';
+import 'package:papyr/settings_screen.dart';
 import 'package:papyr/widgets/snake_bar.dart';
 
 /// 0 Arquivos, 1 Escanear, 2 Ajustes.
@@ -38,7 +39,7 @@ class PapyrApp extends StatelessWidget {
             if (!didPop) _back(context);
           },
           child: Scaffold(
-            body: const [FilesScreen(), CameraScreen(), Center(child: Text('Ajustes'))][index],
+            body: const [FilesScreen(), CameraScreen(), SettingsScreen()][index],
             bottomNavigationBar: SnakeBar(
               index: index,
               onTap: (i) => tab.value = i,
