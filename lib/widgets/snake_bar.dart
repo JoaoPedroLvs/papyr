@@ -55,7 +55,7 @@ class _SnakeBarState extends State<SnakeBar> with SingleTickerProviderStateMixin
           height: 48,
           child: LayoutBuilder(builder: (context, box) {
             final w = box.maxWidth / widget.items.length;
-            return Stack(children: [
+            return Stack(fit: StackFit.expand, children: [
               AnimatedBuilder(
                 animation: _c,
                 builder: (_, _) {
@@ -71,7 +71,7 @@ class _SnakeBarState extends State<SnakeBar> with SingleTickerProviderStateMixin
                   );
                 },
               ),
-              Row(children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 for (final (i, (icon, label)) in widget.items.indexed)
                   Expanded(
                     child: Semantics(
