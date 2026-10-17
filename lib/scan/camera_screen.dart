@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:papyr/main.dart' show tab;
 import 'package:papyr/native.dart' as native;
 
 import 'crop_screen.dart';
@@ -157,7 +158,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     setState(() => _navigating = true);
     _stop();
     await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => const CropScreen()));
-    if (!mounted) return;
+    if (!mounted || tab.value != 1) return; // a finished save already switched to Arquivos
     setState(() => _navigating = false);
     _start();
   }

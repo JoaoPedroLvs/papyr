@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:papyr/native.dart' as native;
 
+import 'save_screen.dart';
 import 'session.dart';
 
 const fullQuad = <double>[0, 0, 1, 0, 1, 1, 0, 1];
@@ -33,6 +34,7 @@ class CropScreen extends StatefulWidget {
 class _CropScreenState extends State<CropScreen> {
   final _pages = PageController();
   int _i = 0;
+  bool _navigating = false;
 
   @override
   void dispose() {
@@ -49,6 +51,13 @@ class _CropScreenState extends State<CropScreen> {
       return;
     }
     setState(() => _i = min(_i, session.photos.length - 1));
+  }
+
+  Future<void> _continue() async {
+    if (_navigating) return;
+    setState(() => _navigating = true);
+    await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const SaveScreen()));
+    if (mounted) setState(() => _navigating = false);
   }
 
   @override
@@ -102,6 +111,7 @@ class _CropScreenState extends State<CropScreen> {
                 icon: const Icon(Icons.delete_outline),
                 label: const Text('Remover foto'),
               ),
+              FilledButton(onPressed: _navigating ? null : _continue, child: const Text('Continuar')),
             ],
           ),
         ),
