@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:papyr/files/image_viewer.dart';
+import 'package:papyr/files/pdf_viewer.dart';
 import 'package:papyr/format.dart';
 import 'package:papyr/library.dart';
 import 'package:papyr/main.dart';
@@ -21,9 +23,10 @@ Future<bool> confirmDelete(BuildContext context, native.MediaItem item) async =>
     ) ??
     false;
 
-Future<void> deleteItem(BuildContext context, native.MediaItem item) async {
+/// Returns whether the item was deleted (false when the user cancelled).
+Future<bool> deleteItem(BuildContext context, native.MediaItem item) async {
   final messenger = ScaffoldMessenger.of(context);
-  if (!await confirmDelete(context, item)) return;
+  if (!await confirmDelete(context, item)) return false;
   try {
     await native.delete(item.uri);
   } on PlatformException catch (e) {
@@ -31,6 +34,14 @@ Future<void> deleteItem(BuildContext context, native.MediaItem item) async {
   }
   await library.refresh();
   messenger.showSnackBar(const SnackBar(content: Text('Arquivo excluído')));
+  return true;
+}
+
+/// A viewer's file vanished (deleted in the gallery, for example): message, close, refresh.
+void closeGone(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O arquivo não existe mais.')));
+  Navigator.pop(context);
+  library.refresh();
 }
 
 class FilesScreen extends StatefulWidget {
@@ -109,6 +120,11 @@ class _RowState extends State<_Row> {
     final thumb = _thumbs[item.uri];
     final scheme = Theme.of(context).colorScheme;
     return ListTile(
+      onTap: () async {
+        await Navigator.of(context, rootNavigator: true)
+            .push(MaterialPageRoute<void>(builder: (_) => item.isPdf ? PdfViewer(item) : ImageViewer(item)));
+        library.refresh();
+      },
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: SizedBox.square(

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:papyr/native.dart' as native;
+import 'package:papyr/pdf_writer.dart';
 import 'package:papyr/scan/crop_screen.dart' show fullQuad;
 
 final tinyJpeg = base64Decode('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABQb/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCKALXj/9k=');
@@ -96,6 +97,26 @@ void main() {
     final back = (await availableCameras()).firstWhere((c) => c.lensDirection == CameraLensDirection.back);
     // This AVD's virtual back camera has no flash unit: enabling the torch fails with "No flash unit".
     expect(await native.hasFlash(back.name), isFalse);
+  });
+
+  testWidgets('pdfInfo, pdfPage and pdf thumbnail on a PDF from our writer', (t) async {
+    final src = await twoColorPng();
+    final cache = await native.cacheDir();
+    final out = '$cache/papyr_out.pdf';
+    final w = PdfWriter.open(out, pageCount: 2);
+    for (final rot in [0, 90]) {
+      await w.addPage((await native.warp(src, fullQuad, rot)).path);
+    }
+    await w.close();
+    final item = await native.save(out, 'papyr_it.pdf', 'application/pdf');
+    expect(await native.pdfInfo(item.uri), 2);
+    final page = await native.pdfPage(item.uri, 1, 300);
+    final img = (await (await ui.instantiateImageCodec(page)).getNextFrame()).image;
+    expect(img.width, 300);
+    expect(img.height, closeTo(400, 2)); // PdfRenderer arredonda a página para pontos inteiros
+    expect((await native.thumbnail(item.uri, 'application/pdf', 128)).take(2), [0xFF, 0xD8]);
+    await native.delete(item.uri);
+    await expectLater(native.pdfInfo(item.uri), code('not_found'));
   });
 
   testWidgets('appVersion', (t) async {

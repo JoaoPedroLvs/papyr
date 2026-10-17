@@ -54,6 +54,12 @@ Future<({String path, int width, int height})> warp(String path, List<double> co
 Future<Uint8List> thumbnail(String uri, String mime, int size) async =>
     (await _ch.invokeMethod<Uint8List>('thumbnail', {'uri': uri, 'mime': mime, 'size': size}))!;
 
+Future<int> pdfInfo(String uri) async => (await _ch.invokeMethod<int>('pdfInfo', {'uri': uri}))!;
+
+/// Page [index] rendered [width] px wide on white, as JPEG.
+Future<Uint8List> pdfPage(String uri, int index, int width) async =>
+    (await _ch.invokeMethod<Uint8List>('pdfPage', {'uri': uri, 'index': index, 'width': width}))!;
+
 Future<void> share(List<String> uris, String mime) => _ch.invokeMethod('share', {'uris': uris, 'mime': mime});
 
 /// Whether the camera (Camera2 id = CameraDescription.name) has a flash unit for the torch.

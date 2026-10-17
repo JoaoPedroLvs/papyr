@@ -11,6 +11,7 @@ import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.pdf.PdfRenderer
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.net.Uri
@@ -26,6 +27,7 @@ import io.flutter.plugin.common.StandardMethodCodec
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.IOException
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -79,8 +81,11 @@ class MainActivity : FlutterActivity() {
             "read" -> contentResolver.openInputStream(uri())?.use { it.readBytes() } ?: throw FileNotFoundException(str("uri"))
             "thumbnail" -> {
                 val size = int("size")
-                jpeg(contentResolver.loadThumbnail(uri(), Size(size, size), null), 90)
+                if (str("mime") == "application/pdf") pdf(uri()) { pdfPage(it, 0, size) }
+                else jpeg(contentResolver.loadThumbnail(uri(), Size(size, size), null), 90)
             }
+            "pdfInfo" -> pdf(uri()) { it.pageCount }
+            "pdfPage" -> pdf(uri()) { pdfPage(it, int("index"), int("width")) }
             "share" -> {
                 share(call.argument<List<String>>("uris")!!.map(Uri::parse), str("mime"))
                 null
@@ -103,6 +108,27 @@ class MainActivity : FlutterActivity() {
             }
             else -> NotImplemented
         }
+    }
+
+    /** The serial channel queue also serializes PdfRenderer, which is not thread-safe. */
+    private fun <T> pdf(uri: Uri, f: (PdfRenderer) -> T): T {
+        val fd = contentResolver.openFileDescriptor(uri, "r") ?: throw FileNotFoundException(uri.toString())
+        val r = try {
+            PdfRenderer(fd)
+        } catch (e: FileNotFoundException) {
+            throw e
+        } catch (e: IOException) {
+            fd.close()
+            throw Fail("decode", e.toString())
+        }
+        return r.use(f)
+    }
+
+    private fun pdfPage(r: PdfRenderer, index: Int, width: Int): ByteArray = r.openPage(index).use { p ->
+        val b = Bitmap.createBitmap(width, max(1, width * p.height / p.width), Bitmap.Config.ARGB_8888)
+        b.eraseColor(Color.WHITE)
+        p.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        jpeg(b, 90)
     }
 
     /** Compresses and recycles [b]. */
