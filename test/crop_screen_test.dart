@@ -39,4 +39,34 @@ void main() {
     expect(photo.detected, [for (final v in q) closeTo(v, 0.03)]);
     expect(photo.corners, same(edited));
   });
+
+  testWidgets('editor detects every photo once, even pages never shown', (tester) async {
+    const q = [0.2, 0.15, 0.8, 0.2, 0.85, 0.85, 0.15, 0.8];
+    final png = (await tester.runAsync(() async {
+      final r = ui.PictureRecorder();
+      Canvas(r)
+        ..drawColor(const Color(0xFF303030), BlendMode.src)
+        ..drawPath(Path()..addPolygon([for (var i = 0; i < 8; i += 2) Offset(q[i] * 600, q[i + 1] * 800)], true),
+            Paint()..color = const Color(0xFFE0E0E0));
+      final img = await r.endRecording().toImage(600, 800);
+      return (await img.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
+    }))!;
+    final previews = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('papyr/native'), (c) async {
+      previews.add((c.arguments as Map)['path'] as String);
+      return {'bytes': png, 'width': 600, 'height': 800};
+    });
+    final photos = [Photo('/x/CAP0.jpg'), Photo('/x/CAP1.jpg'), Photo('/x/CAP2.jpg')];
+    photos.forEach(session.add);
+    addTearDown(session.clear);
+    await tester.pumpWidget(const MaterialApp(home: CropScreen()));
+    for (var i = 0; i < 200 && photos.any((p) => p.detected == null); i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump();
+    }
+    for (final p in photos) {
+      expect(p.detected, [for (final v in q) closeTo(v, 0.03)]);
+    }
+    expect(previews, ['/x/CAP0.jpg', '/x/CAP1.jpg', '/x/CAP2.jpg']); // shown page reuses its decode
+  });
 }

@@ -49,10 +49,37 @@ class CropScreen extends StatefulWidget {
   State<CropScreen> createState() => _CropScreenState();
 }
 
+typedef _Preview = ({Uint8List bytes, int width, int height});
+
 class _CropScreenState extends State<CropScreen> {
   final _pages = PageController();
+  final _previews = <Photo, Future<_Preview>>{}; // one decode per photo, shared by its page and the detection
   int _i = 0;
   bool _navigating = false;
+
+  Future<_Preview> _preview(Photo p) => _previews[p] ??= native.preview(p.path, 1600);
+
+  @override
+  void initState() {
+    super.initState();
+    _detectAll();
+  }
+
+  /// Spec 6.4: once per photo, every photo of the session (save uses `detected` for pages never shown).
+  /// Never touches corners, so a drag made meanwhile wins.
+  Future<void> _detectAll() async {
+    for (final p in [...session.photos]) {
+      if (!mounted) return;
+      if (p.detected != null || !session.photos.contains(p)) continue;
+      try {
+        final img = await _preview(p);
+        final q = await _detectJpeg(img.bytes, img.width, img.height);
+        if (q == null) continue;
+        p.detected = q;
+        if (mounted) setState(() {});
+      } catch (_) {} // no prefill; a preview failure already shows on its page
+    }
+  }
 
   @override
   void dispose() {
@@ -64,6 +91,7 @@ class _CropScreenState extends State<CropScreen> {
     final i = session.photos.indexOf(p);
     if (i < 0) return;
     session.removeAt(i);
+    _previews.remove(p);
     if (session.photos.isEmpty) {
       Navigator.pop(context);
       return;
@@ -101,6 +129,7 @@ class _CropScreenState extends State<CropScreen> {
         itemBuilder: (context, i) => _CropPage(
           key: ObjectKey(photos[i]),
           photo: photos[i],
+          preview: _preview(photos[i]),
           onChanged: () => setState(() {}),
           onRemove: () => _remove(photos[i]),
         ),
@@ -139,8 +168,9 @@ class _CropScreenState extends State<CropScreen> {
 }
 
 class _CropPage extends StatefulWidget {
-  const _CropPage({super.key, required this.photo, required this.onChanged, required this.onRemove});
+  const _CropPage({super.key, required this.photo, required this.preview, required this.onChanged, required this.onRemove});
   final Photo photo;
+  final Future<_Preview> preview;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
 
@@ -152,28 +182,12 @@ class _CropPageState extends State<_CropPage> with AutomaticKeepAliveClientMixin
   static const _inset = 24.0;
   static const _grabRadius = 48.0;
 
-  late final Future<({Uint8List bytes, int width, int height})> _preview = native.preview(widget.photo.path, 1600);
   Rect _rect = Rect.zero; // image rect in upright (child) space
   int? _drag; // corner index being dragged
   Offset _grab = Offset.zero; // corner minus finger at drag start
 
   @override
   bool get wantKeepAlive => true;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.photo.detected == null) _detect();
-  }
-
-  /// Once per photo; never touches corners, so a drag made meanwhile wins.
-  Future<void> _detect() async {
-    try {
-      final img = await _preview;
-      final q = await _detectJpeg(img.bytes, img.width, img.height);
-      if (q != null && mounted) setState(() => widget.photo.detected = q);
-    } catch (_) {} // no prefill; a preview failure already shows in build
-  }
 
   List<double> get _quad => widget.photo.corners ?? widget.photo.detected ?? fullQuad;
 
@@ -223,7 +237,7 @@ class _CropPageState extends State<_CropPage> with AutomaticKeepAliveClientMixin
   Widget build(BuildContext context) {
     super.build(context);
     return FutureBuilder(
-      future: _preview,
+      future: widget.preview,
       builder: (context, s) {
         if (s.hasError) {
           return Center(
@@ -243,7 +257,7 @@ class _CropPageState extends State<_CropPage> with AutomaticKeepAliveClientMixin
     );
   }
 
-  Widget _editor(({Uint8List bytes, int width, int height}) img, Size outer) {
+  Widget _editor(_Preview img, Size outer) {
     final turns = widget.photo.rotation ~/ 90;
     final child = turns.isOdd ? outer.flipped : outer; // RotatedBox swaps the axes for its child
     final avail = Rect.fromLTWH(_inset, _inset, max(1, child.width - 2 * _inset), max(1, child.height - 2 * _inset));
