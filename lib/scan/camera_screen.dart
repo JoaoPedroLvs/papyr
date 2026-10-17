@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:papyr/native.dart' as native;
 
+import 'crop_screen.dart';
 import 'session.dart';
 
 // The plugin is a singleton whose dispose unbinds whatever camera is current,
@@ -25,6 +26,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   bool _background = false;
   bool _openedSettings = false;
   bool _flash = false;
+  bool _navigating = false;
   String? _err; // CameraException code that stopped the start
   final _thumbs = <String, Future<({Uint8List bytes, int width, int height})>>{};
 
@@ -137,6 +139,17 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     setState(() => _torchOn = !_torchOn);
     final c = _c;
     if (c != null) await _setFlash(c, _torchOn ? FlashMode.torch : FlashMode.off);
+  }
+
+  /// Camera off (torch and stream too) while the editor and save screens are on top.
+  Future<void> _openEditor() async {
+    if (_navigating) return;
+    setState(() => _navigating = true);
+    _stop();
+    await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => const CropScreen()));
+    if (!mounted) return;
+    setState(() => _navigating = false);
+    _start();
   }
 
   Future<void> _shoot() async {
@@ -309,14 +322,18 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
       child: Row(
         children: [
-          IconButton(
-            iconSize: 28,
-            color: Colors.white,
-            tooltip: 'Lanterna',
-            onPressed: _toggleTorch,
-            icon: Icon(_torchOn ? Icons.flashlight_on : Icons.flashlight_off),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                iconSize: 28,
+                color: Colors.white,
+                tooltip: 'Lanterna',
+                onPressed: _toggleTorch,
+                icon: Icon(_torchOn ? Icons.flashlight_on : Icons.flashlight_off),
+              ),
+            ),
           ),
-          const Spacer(),
           if (c == null)
             const _Shutter(onPressed: null)
           else
@@ -324,8 +341,21 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               valueListenable: c,
               builder: (context, v, _) => _Shutter(onPressed: v.isTakingPicture ? null : _shoot),
             ),
-          const Spacer(),
-          const SizedBox(width: 48),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: ListenableBuilder(
+                listenable: session,
+                builder: (context, _) {
+                  final n = session.photos.length;
+                  return FilledButton(
+                    onPressed: n == 0 || _navigating ? null : _openEditor,
+                    child: Text('Concluir ($n)'),
+                  );
+                },
+              ),
+            ),
+          ),
         ],
       ),
     );
