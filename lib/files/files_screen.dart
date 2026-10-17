@@ -40,24 +40,7 @@ class FilesScreen extends StatefulWidget {
   State<FilesScreen> createState() => _FilesScreenState();
 }
 
-class _FilesScreenState extends State<FilesScreen> with WidgetsBindingObserver {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) library.refresh();
-  }
-
+class _FilesScreenState extends State<FilesScreen> {
   Widget _message(IconData icon, String text, String action, VoidCallback onPressed) => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 64, color: Colors.grey),
