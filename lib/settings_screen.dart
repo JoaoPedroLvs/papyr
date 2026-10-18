@@ -59,7 +59,7 @@ class SettingsScreen extends StatelessWidget {
                       color: scheme.surfaceContainerHigh,
                       child: SizedBox(
                         height: 8,
-                        child: Row(children: [
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                           for (final (i, (color, _, bytes)) in kinds.indexed) ...[
                             if (i > 0) const SizedBox(width: 2),
                             Expanded(flex: bytes, child: ColoredBox(color: color)),

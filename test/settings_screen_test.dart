@@ -58,6 +58,19 @@ void main() {
     expect(find.byType(PapyrMark), findsOneWidget);
   });
 
+  // device check: a childless ColoredBox in a Row took the Row's loose height and drew 0 dp tall
+  testWidgets('meter segments fill the 8 dp track', (t) async {
+    await pump(t);
+    final scheme = papyrTheme(Brightness.light).colorScheme;
+    for (final color in [scheme.primary, scheme.secondary]) {
+      final segment = find.descendant(
+        of: find.byKey(const ValueKey('meter')),
+        matching: find.byWidgetPredicate((w) => w is ColoredBox && w.color == color),
+      );
+      expect(t.getSize(segment).height, 8);
+    }
+  });
+
   testWidgets('nothing saved hides the meter', (t) async {
     list = [];
     await pump(t);
