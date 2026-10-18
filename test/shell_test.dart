@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,5 +61,31 @@ void main() {
       ..add(Photo('/c/a.jpg'));
     await back(t);
     expect(find.text('Descartar 1 foto?'), findsOneWidget);
+  });
+
+  // device check: after a live light/dark switch, 3-button nav kept the old theme's scrim and button color
+  testWidgets('the shell turns off the system nav bar scrim in both themes', (t) async {
+    addTearDown(t.platformDispatcher.clearPlatformBrightnessTestValue);
+    tab.value = 0;
+    session.clear();
+    for (final b in Brightness.values) {
+      t.platformDispatcher.platformBrightnessTestValue = b;
+      await t.pumpWidget(const PapyrApp());
+      await t.pumpAndSettle();
+      final region = t.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.byType(AnnotatedRegion<SystemUiOverlayStyle>).first,
+      );
+      expect(region.value.systemNavigationBarContrastEnforced, isFalse);
+    }
+  });
+
+  // Android 15+ derives FORCE_LIGHT_NAVIGATION_BARS from the window background unless the theme names a nav bar
+  // color, and never recomputes it on a uiMode change the activity handles itself
+  test('NormalTheme names a transparent nav bar in both themes', () {
+    for (final dir in ['values', 'values-night']) {
+      final xml = File('android/app/src/main/res/$dir/styles.xml').readAsStringSync();
+      final normal = RegExp(r'<style name="NormalTheme".*?</style>', dotAll: true).firstMatch(xml)![0]!;
+      expect(normal, contains('<item name="android:navigationBarColor">@android:color/transparent</item>'), reason: dir);
+    }
   });
 }

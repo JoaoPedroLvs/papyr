@@ -44,16 +44,19 @@ class PapyrApp extends StatelessWidget {
             if (!didPop) goBack(context);
           },
           child: AnnotatedRegion<SystemUiOverlayStyle>(
-            // .dark alone leaves the system nav buttons light, lost on the paper bar
+            // .dark alone leaves the system nav buttons light, lost on the paper bar.
+            // No contrast scrim: after a live theme switch Android kept the old theme's scrim on 3-button nav.
             value: Theme.of(context).brightness == Brightness.dark
                 ? SystemUiOverlayStyle.light.copyWith(
                     statusBarColor: Colors.transparent,
                     systemNavigationBarColor: Colors.transparent,
+                    systemNavigationBarContrastEnforced: false,
                   )
                 : SystemUiOverlayStyle.dark.copyWith(
                     statusBarColor: Colors.transparent,
                     systemNavigationBarColor: Colors.transparent,
                     systemNavigationBarIconBrightness: Brightness.dark,
+                    systemNavigationBarContrastEnforced: false,
                   ),
             child: Scaffold(
               body: const [FilesScreen(), CameraScreen(), SettingsScreen()][index],
