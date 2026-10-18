@@ -1,10 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:papyr/files/files_screen.dart';
 import 'package:papyr/library.dart';
 import 'package:papyr/native.dart' as native;
 import 'package:papyr/scan/camera_screen.dart';
 import 'package:papyr/scan/session.dart';
 import 'package:papyr/settings_screen.dart';
+import 'package:papyr/theme.dart';
 import 'package:papyr/widgets/snake_bar.dart';
 
 /// 0 Arquivos, 1 Escanear, 2 Ajustes.
@@ -14,21 +17,22 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   native.cleanCache().ignore();
   library.refresh();
+  LicenseRegistry.addLicense(() async* {
+    for (final font in ['Newsreader', 'Outfit']) {
+      yield LicenseEntryWithLineBreaks([font], await rootBundle.loadString('assets/fonts/$font-OFL.txt'));
+    }
+  });
   runApp(const PapyrApp());
 }
 
 class PapyrApp extends StatelessWidget {
   const PapyrApp({super.key});
 
-  static const _seed = Color(0xFF00897B);
-
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Papyr',
-    theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: _seed)),
-    darkTheme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: _seed, brightness: Brightness.dark),
-    ),
+    theme: papyrTheme(Brightness.light),
+    darkTheme: papyrTheme(Brightness.dark),
     home: ListenableBuilder(
       listenable: Listenable.merge([tab, session]),
       builder: (context, _) {
