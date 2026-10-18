@@ -220,21 +220,27 @@ class _SaveScreenState extends State<SaveScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _name,
-          maxLength: 100,
-          decoration: const InputDecoration(labelText: 'Nome'),
+        // The fields scroll and Salvar stays put: large text plus the keyboard can leave less room than they need.
+        Expanded(
+          child: ListView(
+            children: [
+              TextField(
+                controller: _name,
+                maxLength: 100,
+                decoration: const InputDecoration(labelText: 'Nome'),
+              ),
+              const SizedBox(height: 16),
+              SegmentedButton<SaveMode>(
+                segments: const [
+                  ButtonSegment(value: SaveMode.images, label: Text('Imagens')),
+                  ButtonSegment(value: SaveMode.pdf, label: Text('PDF')),
+                ],
+                selected: {_mode},
+                onSelectionChanged: _locked ? null : (s) => setState(() => _mode = s.first),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
-        SegmentedButton<SaveMode>(
-          segments: const [
-            ButtonSegment(value: SaveMode.images, label: Text('Imagens')),
-            ButtonSegment(value: SaveMode.pdf, label: Text('PDF')),
-          ],
-          selected: {_mode},
-          onSelectionChanged: _locked ? null : (s) => setState(() => _mode = s.first),
-        ),
-        const Spacer(),
         FilledButton(onPressed: _save, child: const Text('Salvar')),
       ],
     );

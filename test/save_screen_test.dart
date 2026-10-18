@@ -86,6 +86,24 @@ void main() {
     expect(find.byIcon(Icons.check_circle_outline), findsNothing);
   });
 
+  // Review Focus 1: the title in the body must not push Salvar under the keyboard at large text
+  testWidgets('200% text with the keyboard up does not overflow', (t) async {
+    t.view
+      ..physicalSize = const Size(360, 690)
+      ..devicePixelRatio = 1
+      ..viewInsets = const FakeViewPadding(bottom: 280);
+    t.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(t.view.reset);
+    addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
+    session.add(Photo('/c/CAP0.jpg'));
+    await open(t);
+    expect(t.takeException(), isNull);
+    final salvar = find.widgetWithText(FilledButton, 'Salvar');
+    await t.ensureVisible(salvar);
+    await t.pumpAndSettle();
+    expect(t.getRect(salvar).bottom, lessThanOrEqualTo(690 - 280));
+  });
+
   testWidgets('failure keeps the session, explains and retries', (t) async {
     session.add(Photo('/c/CAP0.jpg'));
     failWarp = true;
