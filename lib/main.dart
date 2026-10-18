@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:papyr/files/files_screen.dart';
+import 'package:papyr/format.dart';
 import 'package:papyr/library.dart';
 import 'package:papyr/native.dart' as native;
 import 'package:papyr/scan/camera_screen.dart';
@@ -40,45 +41,64 @@ class PapyrApp extends StatelessWidget {
         return PopScope(
           canPop: index == 0,
           onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) _back(context);
+            if (!didPop) goBack(context);
           },
-          child: Scaffold(
-            body: const [FilesScreen(), CameraScreen(), SettingsScreen()][index],
-            bottomNavigationBar: SnakeBar(
-              index: index,
-              onTap: (i) => tab.value = i,
-              items: const [
-                (Icons.folder_outlined, 'Arquivos'),
-                (Icons.document_scanner_outlined, 'Escanear'),
-                (Icons.settings_outlined, 'Ajustes'),
-              ],
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            // .dark alone leaves the system nav buttons light, lost on the paper bar
+            value: Theme.of(context).brightness == Brightness.dark
+                ? SystemUiOverlayStyle.light.copyWith(
+                    statusBarColor: Colors.transparent,
+                    systemNavigationBarColor: Colors.transparent,
+                  )
+                : SystemUiOverlayStyle.dark.copyWith(
+                    statusBarColor: Colors.transparent,
+                    systemNavigationBarColor: Colors.transparent,
+                    systemNavigationBarIconBrightness: Brightness.dark,
+                  ),
+            child: Scaffold(
+              body: const [FilesScreen(), CameraScreen(), SettingsScreen()][index],
+              // never null: a null <-> widget swap runs the FAB's shrink-and-spin, which ignores disableAnimations
+              floatingActionButton: index == 1 ? const SizedBox.shrink() : ScanButton(onPressed: () => tab.value = 1),
+              floatingActionButtonLocation: scanButtonLocation,
+              bottomNavigationBar: index == 1
+                  ? null
+                  : SnakeBar(
+                      index: index,
+                      onTap: (i) => tab.value = i,
+                      items: const [(Icons.folder_outlined, 'Arquivos'), null, (Icons.settings_outlined, 'Ajustes')],
+                    ),
             ),
           ),
         );
       },
     ),
   );
+}
 
-  /// The only root back handler: every PopScope in a route gets the callback, so the discard prompt lives here.
-  Future<void> _back(BuildContext context) async {
-    final n = session.photos.length;
-    if (tab.value != 1 || n == 0) {
-      tab.value = 0;
-      return;
-    }
-    final discard = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Descartar $n fotos?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Descartar')),
-        ],
-      ),
-    );
-    if (discard != true) return;
-    session.clear();
-    native.cleanCache();
+/// The only root back handler: every PopScope in a route gets the callback, so the discard prompt lives here.
+/// The camera's X uses it too.
+Future<void> goBack(BuildContext context) async {
+  final n = session.photos.length;
+  if (tab.value != 1 || n == 0) {
     tab.value = 0;
+    return;
   }
+  final discard = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Descartar ${plural(n, 'foto', 'fotos')}?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+          child: const Text('Descartar'),
+        ),
+      ],
+    ),
+  );
+  if (discard != true) return;
+  session.clear();
+  native.cleanCache();
+  tab.value = 0;
 }

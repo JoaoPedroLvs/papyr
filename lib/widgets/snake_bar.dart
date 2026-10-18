@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:papyr/widgets/papyr_mark.dart';
 
-/// Bottom bar whose pill stretches toward the new item, then shrinks behind it.
+/// Icon-only bottom bar whose pill stretches toward the new item, then shrinks behind it.
+/// A null item is an empty column, under the [ScanButton]; [index] always points at a non-null one.
 class SnakeBar extends StatefulWidget {
   const SnakeBar({super.key, required this.index, required this.onTap, required this.items});
 
   final int index;
   final ValueChanged<int> onTap;
-  final List<(IconData, String)> items;
+  final List<(IconData, String)?> items;
 
   @override
   State<SnakeBar> createState() => _SnakeBarState();
@@ -35,7 +37,11 @@ class _SnakeBarState extends State<SnakeBar> with SingleTickerProviderStateMixin
     _from = _edges();
     _right = widget.index > _to;
     _to = widget.index;
-    _c.forward(from: 0);
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _c.value = 1;
+    } else {
+      _c.forward(from: 0);
+    }
   }
 
   @override
@@ -48,59 +54,53 @@ class _SnakeBarState extends State<SnakeBar> with SingleTickerProviderStateMixin
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: scheme.surfaceContainer,
+      color: scheme.surface,
+      shape: Border(top: BorderSide(color: scheme.outlineVariant)), // paint only: the row keeps its full 64
       child: Padding(
-        padding: EdgeInsets.fromLTRB(12, 8, 12, 8 + MediaQuery.viewPaddingOf(context).bottom),
+        padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom),
         child: SizedBox(
-          height: 48,
+          height: 64,
           child: LayoutBuilder(builder: (context, box) {
-            final w = box.maxWidth / widget.items.length;
+            final w = box.maxWidth / widget.items.length, inset = (w - 64) / 2;
             return Stack(fit: StackFit.expand, children: [
               AnimatedBuilder(
                 animation: _c,
                 builder: (_, _) {
                   final (l, r) = _edges();
                   return Positioned(
-                    left: l * w + 4,
-                    width: (r - l) * w - 8,
-                    top: 0,
-                    bottom: 0,
+                    key: const ValueKey('pill'),
+                    left: l * w + inset,
+                    width: (r - l) * w - 2 * inset,
+                    top: 10,
+                    height: 44,
                     child: DecoratedBox(
-                      decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(24)),
+                      decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(22)),
                     ),
                   );
                 },
               ),
               Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                for (final (i, (icon, label)) in widget.items.indexed)
-                  Expanded(
-                    child: Semantics(
-                      button: true,
-                      selected: i == widget.index,
-                      label: label,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(24),
-                        onTap: () => widget.onTap(i),
-                        child: ExcludeSemantics(
-                          child: IconTheme.merge(
-                            data: IconThemeData(color: i == widget.index ? scheme.onSecondaryContainer : scheme.onSurfaceVariant),
-                            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                              Icon(icon),
-                              if (i == widget.index) ...[
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(label,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context).textTheme.labelLarge?.copyWith(color: scheme.onSecondaryContainer)),
-                                ),
-                              ],
-                            ]),
+                for (final (i, item) in widget.items.indexed)
+                  if (item case (final icon, final label))
+                    Expanded(
+                      child: Semantics(
+                        button: true,
+                        selected: i == widget.index,
+                        label: label,
+                        child: Tooltip(
+                          message: label,
+                          excludeFromSemantics: true, // the label above already names it
+                          child: InkWell(
+                            onTap: () => widget.onTap(i),
+                            child: Center(
+                              child: Icon(icon, size: 24, color: i == widget.index ? scheme.primary : scheme.outline),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                    )
+                  else
+                    const Spacer(),
               ]),
             ]);
           }),
@@ -109,3 +109,57 @@ class _SnakeBarState extends State<SnakeBar> with SingleTickerProviderStateMixin
     );
   }
 }
+
+/// The raised Escanear button, for the Scaffold's FAB slot: there its top, above the bar, still takes taps.
+class ScanButton extends StatelessWidget {
+  const ScanButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = scheme.brightness == Brightness.dark;
+    final r = BorderRadius.circular(21);
+    return Semantics(
+      button: true,
+      label: 'Escanear',
+      child: Tooltip(
+        message: 'Escanear',
+        excludeFromSemantics: true,
+        child: DecoratedBox(
+          decoration: BoxDecoration(borderRadius: r, boxShadow: [
+            BoxShadow(
+              color: dark ? const Color(0x66000000) : const Color(0x4D102E50),
+              offset: const Offset(0, 8),
+              blurRadius: 18,
+            ),
+          ]),
+          child: Material(
+            color: scheme.primaryContainer,
+            borderRadius: r,
+            child: InkWell(
+              onTap: onPressed,
+              borderRadius: r,
+              child: SizedBox.square(
+                dimension: 62,
+                child: Center(child: PapyrMark.scan(width: 29, brackets: scheme.onPrimaryContainer)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScanButtonLocation extends FloatingActionButtonLocation {
+  const _ScanButtonLocation();
+
+  @override
+  Offset getOffset(ScaffoldPrelayoutGeometry g) =>
+      Offset((g.scaffoldSize.width - g.floatingActionButtonSize.width) / 2, g.contentBottom - 22);
+}
+
+/// Centred, with the button's top 22 dp above the bar's top edge.
+const FloatingActionButtonLocation scanButtonLocation = _ScanButtonLocation();

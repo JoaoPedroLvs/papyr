@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:papyr/library.dart';
 import 'package:papyr/main.dart';
 import 'package:papyr/settings_screen.dart';
+import 'package:papyr/widgets/snake_bar.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -43,5 +44,7 @@ void main() {
     await t.pumpWidget(const PapyrApp());
     await t.pumpAndSettle();
     expect(find.byType(SettingsScreen), findsOneWidget);
+    expect(find.byType(SnakeBar), findsOneWidget);
+    expect(find.byType(ScanButton), findsOneWidget);
   });
 }
