@@ -71,6 +71,15 @@ void main() {
     }
   });
 
+  // device check: Image.color + srcIn left a hairline at both edges of the wordmark (Impeller)
+  testWidgets('wordmark is tinted through a layer, not Image.color', (t) async {
+    await pump(t);
+    final word = find.byWidgetPredicate((w) => w is Image && w.semanticLabel == 'Papyr');
+    expect(t.widget<Image>(word).color, isNull);
+    final layer = t.widget<ColorFiltered>(find.ancestor(of: word, matching: find.byType(ColorFiltered)));
+    expect(layer.colorFilter, ColorFilter.mode(papyrTheme(Brightness.light).colorScheme.primary, BlendMode.srcIn));
+  });
+
   testWidgets('nothing saved hides the meter', (t) async {
     list = [];
     await pump(t);

@@ -113,12 +113,10 @@ class SettingsScreen extends StatelessWidget {
             child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
               const PapyrMark(width: 32),
               const SizedBox(height: 8),
-              Image.asset(
-                'assets/brand/wordmark.png',
-                height: 22,
-                color: scheme.primary,
-                colorBlendMode: BlendMode.srcIn,
-                semanticLabel: 'Papyr',
+              // a layer, not Image.color: Impeller drew a hairline at the image edges with the paint filter
+              ColorFiltered(
+                colorFilter: ColorFilter.mode(scheme.primary, BlendMode.srcIn),
+                child: Image.asset('assets/brand/wordmark.png', height: 22, semanticLabel: 'Papyr'),
               ),
               const SizedBox(height: 6),
               FutureBuilder(
