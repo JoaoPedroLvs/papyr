@@ -4,8 +4,8 @@ import 'package:papyr/files/image_viewer.dart';
 import 'package:papyr/files/pdf_viewer.dart';
 import 'package:papyr/format.dart';
 import 'package:papyr/library.dart';
-import 'package:papyr/main.dart';
 import 'package:papyr/native.dart' as native;
+import 'package:papyr/widgets/papyr_mark.dart';
 
 final _thumbs = <String, Uint8List>{};
 
@@ -17,7 +17,11 @@ Future<bool> confirmDelete(BuildContext context, native.MediaItem item) async =>
         content: Text('"${item.name}" será apagado do aparelho.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Excluir')),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(c).colorScheme.error),
+            child: const Text('Excluir'),
+          ),
         ],
       ),
     ) ??
@@ -55,44 +59,92 @@ void closeRoute(BuildContext context) {
   }
 }
 
-class FilesScreen extends StatefulWidget {
+class FilesScreen extends StatelessWidget {
   const FilesScreen({super.key});
 
-  @override
-  State<FilesScreen> createState() => _FilesScreenState();
-}
-
-class _FilesScreenState extends State<FilesScreen> {
-  Widget _message(IconData icon, String text, String action, VoidCallback onPressed) => Center(
+  /// Empty and error states replace the whole scrollable, header included.
+  Widget _message(BuildContext context, String title, List<Widget> below) {
+    final text = Theme.of(context).textTheme;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(34, 0, 34, 40),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(text, textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          FilledButton(onPressed: onPressed, child: Text(action)),
+          const PapyrMark(width: 120),
+          const SizedBox(height: 18),
+          Text(title, style: text.headlineMedium, textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          ...below,
         ]),
-      );
+      ),
+    );
+  }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Papyr')),
-        body: ListenableBuilder(
+  Widget build(BuildContext context) => SafeArea(
+        bottom: false,
+        child: ListenableBuilder(
           listenable: library,
           builder: (context, _) {
             final items = library.items;
+            final theme = Theme.of(context);
             if (items.isEmpty) {
               if (library.loading) return const Center(child: CircularProgressIndicator());
               if (library.error != null) {
-                return _message(Icons.error_outline, 'Não foi possível carregar os arquivos.', 'Tentar de novo', library.refresh);
+                return _message(context, 'Não foi possível carregar os arquivos.', [
+                  const SizedBox(height: 12),
+                  FilledButton(onPressed: library.refresh, child: const Text('Tentar de novo')),
+                ]);
               }
-              return _message(Icons.description_outlined, 'Nenhum arquivo ainda', 'Escanear', () => tab.value = 1);
+              return _message(context, 'Nada escaneado ainda', [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 240),
+                  child: Text(
+                    'Toque no botão do meio para fotografar sua primeira folha.',
+                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ]);
+            }
+            // the list comes newest first, so each day is one run under its label
+            final now = DateTime.now();
+            final rows = <Widget>[];
+            String? day;
+            for (final item in items) {
+              final d = formatDay(item.date, now);
+              if (d != day) {
+                rows.add(Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+                  child: Text(day = d, style: theme.textTheme.titleSmall),
+                ));
+              }
+              rows.add(_Row(item, key: ValueKey(item.uri)));
             }
             return RefreshIndicator(
               onRefresh: library.refresh,
-              child: ListView.builder(
-                itemCount: items.length,
-                itemBuilder: (_, i) => _Row(items[i], key: ValueKey(items[i].uri)),
-              ),
+              child: CustomScrollView(slivers: [
+                // the bottom 24 keeps the last row clear of the raised Escanear button
+                SliverPadding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  sliver: SliverList.list(children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const PapyrMark(width: 30),
+                        const SizedBox(height: 14),
+                        Text('Seus documentos', style: theme.textTheme.headlineLarge),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${plural(items.length, 'arquivo', 'arquivos')}, '
+                          '${formatSize(items.fold(0, (sum, i) => sum + i.size))}',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ]),
+                    ),
+                    ...rows,
+                  ]),
+                ),
+              ]),
             );
           },
         ),
@@ -121,7 +173,7 @@ class _RowState extends State<_Row> {
       final bytes = await native.thumbnail(item.uri, item.mime, 192);
       if (mounted) setState(() => _thumbs[item.uri] = bytes);
     } on PlatformException {
-      // the grey icon stays
+      // the placeholder stays
     }
   }
 
@@ -130,44 +182,49 @@ class _RowState extends State<_Row> {
     final item = widget.item;
     final thumb = _thumbs[item.uri];
     final scheme = Theme.of(context).colorScheme;
-    return ListTile(
+    final text = Theme.of(context).textTheme;
+    final r = BorderRadius.circular(4);
+    return InkWell(
       onTap: () async {
         await Navigator.of(context, rootNavigator: true)
             .push(MaterialPageRoute<void>(builder: (_) => item.isPdf ? PdfViewer(item) : ImageViewer(item)));
         library.refresh();
       },
-      leading: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: SizedBox.square(
-          dimension: 56,
-          child: thumb == null
-              ? ColoredBox(
-                  color: scheme.surfaceContainerHighest,
-                  child: Icon(item.isPdf ? Icons.picture_as_pdf_outlined : Icons.image_outlined, color: Colors.grey),
-                )
-              : Image.memory(thumb, fit: BoxFit.cover),
-        ),
-      ),
-      title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Row(children: [
-        DecoratedBox(
-          decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(4)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            child: Text(item.isPdf ? 'PDF' : 'IMG',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.onSecondaryContainer)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
+        child: Row(children: [
+          Container(
+            width: 38,
+            height: 52,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(color: scheme.surfaceContainerLowest, borderRadius: r),
+            // in front, so the thumbnail does not cover the outline
+            foregroundDecoration: BoxDecoration(border: Border.all(color: scheme.outlineVariant), borderRadius: r),
+            child: thumb == null
+                ? Icon(item.isPdf ? Icons.picture_as_pdf_outlined : Icons.image_outlined, size: 18, color: scheme.outline)
+                : Image.memory(thumb, fit: BoxFit.cover),
           ),
-        ),
-        const SizedBox(width: 8),
-        Flexible(child: Text('${formatDate(item.date)} · ${formatSize(item.size)}', maxLines: 1, overflow: TextOverflow.ellipsis)),
-      ]),
-      trailing: PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert),
-        onSelected: (v) => v == 'share' ? native.share([item.uri], item.mime) : deleteItem(context, item),
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'share', child: Text('Compartilhar')),
-          PopupMenuItem(value: 'delete', child: Text('Excluir')),
-        ],
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(item.name, style: text.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(
+                '${item.isPdf ? 'PDF' : 'Imagem'}, ${formatSize(item.size)}, ${formatTime(item.date)}',
+                style: text.bodySmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ]),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (v) => v == 'share' ? native.share([item.uri], item.mime) : deleteItem(context, item),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'share', child: Text('Compartilhar')),
+              PopupMenuItem(value: 'delete', child: Text('Excluir', style: TextStyle(color: scheme.error))),
+            ],
+          ),
+        ]),
       ),
     );
   }
