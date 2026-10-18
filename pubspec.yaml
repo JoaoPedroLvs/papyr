@@ -58,6 +58,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/brand/wordmark.png
     - assets/fonts/Newsreader-OFL.txt
     - assets/fonts/Outfit-OFL.txt
 
