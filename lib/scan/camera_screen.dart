@@ -5,8 +5,10 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:papyr/main.dart' show tab;
+import 'package:papyr/format.dart';
+import 'package:papyr/main.dart' show goBack, tab;
 import 'package:papyr/native.dart' as native;
+import 'package:papyr/theme.dart';
 
 import 'crop_screen.dart';
 import 'detector.dart';
@@ -18,6 +20,12 @@ import 'session.dart';
 Future<void> _cameraGate = Future.value();
 bool _torchOn = false; // lasts while the app lives
 final _flashUnits = <String, bool>{}; // camera id -> has a flash unit
+final _paperButton = FilledButton.styleFrom(
+  backgroundColor: Brand.paper,
+  foregroundColor: Brand.navy,
+  disabledBackgroundColor: Brand.paper.withValues(alpha: 0.24),
+  disabledForegroundColor: Brand.navy.withValues(alpha: 0.38),
+);
 
 /// Sends its port, then answers every (gray, w, h) with detectQuad: a missing reply would leave the camera busy.
 void _detectWorker(SendPort out) {
@@ -284,10 +292,26 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       child: ColoredBox(
         color: Colors.black,
         child: SafeArea(
-          bottom: false,
           child: Column(
             children: [
-              Expanded(child: _preview()),
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _preview(),
+                    Positioned(
+                      left: 14,
+                      top: 12,
+                      child: IconButton(
+                        tooltip: 'Fechar',
+                        onPressed: () => goBack(context),
+                        style: IconButton.styleFrom(backgroundColor: Colors.black45, foregroundColor: Colors.white),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               _strip(),
               _controls(),
             ],
@@ -305,7 +329,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
+            CircularProgressIndicator(color: Brand.paper),
             SizedBox(height: 16),
             Text('Abrindo câmera…', style: TextStyle(color: Colors.white)),
           ],
@@ -349,9 +373,10 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               style: const TextStyle(color: Colors.white),
             ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: _retry, child: const Text('Tentar novamente')),
+            FilledButton(style: _paperButton, onPressed: _retry, child: const Text('Tentar novamente')),
             if (denied)
               TextButton(
+                style: TextButton.styleFrom(foregroundColor: Brand.paper),
                 onPressed: () {
                   _openedSettings = true;
                   native.openAppSettings();
@@ -370,20 +395,20 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       builder: (context, _) {
         final photos = session.photos;
         return SizedBox(
-          height: 88,
+          height: 70,
           child: Row(
             children: [
               Expanded(
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.only(left: 16),
                   itemCount: photos.length,
                   itemBuilder: (context, i) => _thumb(photos[i].path, () => session.removeAt(i)),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Text('${photos.length} foto(s)', style: const TextStyle(color: Colors.white)),
+                padding: const EdgeInsets.only(top: 20, right: 16), // level with the thumbs
+                child: Text(plural(photos.length, 'foto', 'fotos'), style: const TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -394,15 +419,16 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
   Widget _thumb(String path, VoidCallback onRemove) {
     final f = _thumbs.putIfAbsent(path, () => native.preview(path, 256));
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: SizedBox.square(
-              dimension: 56,
+    // The margin holds the X's whole 48 dp target: taps outside a Stack's own box never reach it.
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 22, right: 22),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: SizedBox(
+              width: 34,
+              height: 46,
               child: FutureBuilder(
                 future: f,
                 builder: (context, s) => s.hasData
@@ -411,27 +437,32 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
               ),
             ),
           ),
-          Positioned(
-            top: -8,
-            right: -8,
-            child: IconButton(
-              visualDensity: VisualDensity.compact,
-              iconSize: 16,
-              style: IconButton.styleFrom(backgroundColor: Colors.black54, foregroundColor: Colors.white),
-              tooltip: 'Remover foto',
-              onPressed: onRemove,
-              icon: const Icon(Icons.close),
+        ),
+        Positioned(
+          top: 0,
+          right: 0,
+          child: IconButton(
+            tooltip: 'Remover foto',
+            style: IconButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(16, 16),
+              fixedSize: const Size(16, 16),
+              tapTargetSize: MaterialTapTargetSize.padded,
+              backgroundColor: const Color(0xFF2A2A2A),
+              foregroundColor: Colors.white,
             ),
+            onPressed: onRemove,
+            icon: const Icon(Icons.close, size: 12),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _controls() {
     final c = _c;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 26),
       child: Row(
         children: [
           Expanded(
@@ -442,6 +473,10 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 color: Colors.white,
                 tooltip: 'Lanterna',
                 disabledColor: Colors.white24,
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                  fixedSize: const Size.square(44),
+                ),
                 onPressed: _hasFlash && c != null ? _toggleTorch : null,
                 icon: Icon(_torchOn && _hasFlash ? Icons.flashlight_on : Icons.flashlight_off),
               ),
@@ -463,10 +498,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                   final n = session.photos.length;
                   final shooting = c?.value.isTakingPicture ?? false;
                   return FilledButton(
-                    style: FilledButton.styleFrom(
-                      disabledBackgroundColor: Colors.white12,
-                      disabledForegroundColor: Colors.white38,
-                    ),
+                    style: _paperButton,
                     onPressed: n == 0 || _navigating || shooting ? null : _openEditor,
                     child: Text('Concluir ($n)'),
                   );
@@ -492,17 +524,17 @@ class _Shutter extends StatelessWidget {
       child: GestureDetector(
         onTap: onPressed,
         child: Container(
-          width: 72,
-          height: 72,
+          width: 74,
+          height: 74,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 4),
+            border: Border.all(color: Brand.paper, width: 4),
           ),
           padding: const EdgeInsets.all(4),
           child: DecoratedBox(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: onPressed == null ? Colors.white38 : Colors.white,
+              color: onPressed == null ? Brand.paper.withValues(alpha: 0.38) : Brand.paper,
             ),
           ),
         ),
@@ -523,12 +555,22 @@ class QuadPainter extends CustomPainter {
     for (var i = 2; i < 8; i += 2) {
       p.lineTo(q[i] * s.width, q[i + 1] * s.height);
     }
+    p.close();
+    // the glow: the same outline, wider and blurred, under the line
     canvas.drawPath(
-      p..close(),
+      p,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..color = Brand.green.withValues(alpha: 0.45)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+    canvas.drawPath(
+      p,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3
-        ..color = const Color(0xFF00E676),
+        ..color = Brand.green,
     );
   }
 

@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:papyr/main.dart';
 import 'package:papyr/scan/camera_screen.dart';
 import 'package:papyr/scan/session.dart';
+import 'package:papyr/widgets/snake_bar.dart';
 
 import 'fake_camera.dart';
 // ignore: depend_on_referenced_packages
@@ -29,7 +31,8 @@ void main() {
       const MethodChannel('papyr/native'), (c) async {
         if (c.method == 'hasFlash') return true;
         if (c.method == 'preview') throw PlatformException(code: 'decode');
-        return null;
+        if (c.method == 'list') return [];
+        return null; // cleanCache too
       });
   });
 
@@ -135,10 +138,51 @@ void main() {
     await leave(t);
   }
 
+  // the strip counts in Portuguese
+  Future<void> count(WidgetTester t) async {
+    fresh();
+    session.add(Photo('/c/CAP0.jpg'));
+    await pumpHost(t);
+    await settle(t);
+    expect(find.text('1 foto'), findsOneWidget);
+    await leave(t);
+  }
+
+  // X with no photos goes to Arquivos
+  Future<void> close(WidgetTester t) async {
+    fresh();
+    tab.value = 1;
+    await pumpHost(t);
+    await settle(t);
+    await t.tap(find.byTooltip('Fechar'));
+    await settle(t);
+    expect(tab.value, 0);
+    await leave(t);
+  }
+
+  // the shell hides the bar and the scan button on Escanear and brings them back after X
+  Future<void> shell(WidgetTester t) async {
+    fresh();
+    tab.value = 1;
+    await t.pumpWidget(const PapyrApp());
+    await settle(t);
+    expect(find.byType(SnakeBar), findsNothing);
+    expect(find.byType(ScanButton), findsNothing);
+    await t.tap(find.byTooltip('Fechar'));
+    await settle(t);
+    expect(find.byType(SnakeBar), findsOneWidget);
+    expect(find.byType(ScanButton), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+    await settle(t); // dispose the camera before the next scenario
+  }
+
   testWidgets('camera lifecycle (spec 6.3, Review Focus 1)', (t) async {
     await reenter(t);
     await dialog(t);
     await concluir(t);
     await torch(t);
+    await count(t);
+    await close(t);
+    await shell(t);
   });
 }
