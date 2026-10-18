@@ -33,3 +33,31 @@ String formatSize(int bytes) {
   }
   return '${v.toStringAsFixed(1).replaceAll('.', ',')} ${units[i]}';
 }
+
+String plural(int n, String one, String many) => '$n ${n == 1 ? one : many}';
+
+String formatTime(DateTime t) => '${_two(t.hour)}:${_two(t.minute)}';
+
+const _months = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+];
+
+bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// Section label by calendar day, not by 24 h; a future date (clock skew) is never "Hoje".
+String formatDay(DateTime t, DateTime now) {
+  if (_sameDay(t, now)) return 'Hoje';
+  if (_sameDay(t, DateTime(now.year, now.month, now.day - 1))) return 'Ontem';
+  final s = '${t.day} de ${_months[t.month - 1]}';
+  return t.year == now.year ? s : '$s de ${t.year}';
+}
+
+/// "12 imagens e 3 PDFs", omitting a kind at zero; null when both are zero.
+String? storageItems(int images, int pdfs) {
+  final parts = [
+    if (images > 0) plural(images, 'imagem', 'imagens'),
+    if (pdfs > 0) plural(pdfs, 'PDF', 'PDFs'),
+  ];
+  return parts.isEmpty ? null : parts.join(' e ');
+}
