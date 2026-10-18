@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:papyr/files/image_viewer.dart';
 import 'package:papyr/native.dart' as native;
+import 'package:papyr/theme.dart';
 
 class PdfViewer extends StatefulWidget {
   const PdfViewer(this.item, {super.key});
@@ -42,12 +43,12 @@ class _PdfViewerState extends State<PdfViewer> with ViewerGone {
   Widget build(BuildContext context) {
     final n = _count;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Brand.night,
       appBar: viewerBar(context, widget.item, delete),
       body: _failed
-          ? const Center(child: Text('Não foi possível abrir o arquivo.', style: TextStyle(color: Colors.white)))
+          ? const Center(child: Text('Não foi possível abrir o arquivo.', style: TextStyle(color: Brand.paper)))
           : n == null
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: CircularProgressIndicator(color: Brand.paper))
               : Stack(
                   children: [
                     PageView.builder(
@@ -70,10 +71,10 @@ class _PdfViewerState extends State<PdfViewer> with ViewerGone {
                       bottom: 24,
                       child: Center(
                         child: DecoratedBox(
-                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(16)),
+                          decoration: BoxDecoration(color: const Color(0x99000000), borderRadius: BorderRadius.circular(16)),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            child: Text('${_page + 1} / $n', style: const TextStyle(color: Colors.white)),
+                            child: Text('${_page + 1} / $n', style: const TextStyle(color: Brand.paper, fontWeight: FontWeight.w500)),
                           ),
                         ),
                       ),
@@ -132,9 +133,9 @@ class _PdfPageState extends State<_PdfPage> {
   Widget build(BuildContext context) {
     final bytes = _bytes;
     if (_failed) {
-      return const Center(child: Text('Não foi possível abrir o arquivo.', style: TextStyle(color: Colors.white)));
+      return const Center(child: Text('Não foi possível abrir o arquivo.', style: TextStyle(color: Brand.paper)));
     }
-    if (bytes == null) return const Center(child: CircularProgressIndicator());
+    if (bytes == null) return const Center(child: CircularProgressIndicator(color: Brand.paper));
     return InteractiveViewer(
       transformationController: _tc,
       maxScale: 8,

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:papyr/files/files_screen.dart';
 import 'package:papyr/library.dart';
 import 'package:papyr/native.dart' as native;
+import 'package:papyr/theme.dart';
 
 class ImageViewer extends StatefulWidget {
   const ImageViewer(this.item, {super.key});
@@ -38,12 +39,12 @@ class _ImageViewerState extends State<ImageViewer> with ViewerGone {
   Widget build(BuildContext context) {
     final bytes = _bytes;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Brand.night,
       appBar: viewerBar(context, widget.item, delete),
       body: _failed
-          ? const Center(child: Text('Não foi possível abrir o arquivo.', style: TextStyle(color: Colors.white)))
+          ? const Center(child: Text('Não foi possível abrir o arquivo.', style: TextStyle(color: Brand.paper)))
           : bytes == null
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: CircularProgressIndicator(color: Brand.paper))
               : InteractiveViewer(maxScale: 8, child: Center(child: Image.memory(bytes, cacheWidth: 4096))),
     );
   }
@@ -91,9 +92,9 @@ mixin ViewerGone<T extends StatefulWidget> on State<T> {
 
 /// Name, Compartilhar and Excluir; shared by both viewers.
 AppBar viewerBar(BuildContext context, native.MediaItem item, VoidCallback onDelete) => AppBar(
-      backgroundColor: Colors.black,
-      foregroundColor: Colors.white,
-      title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      backgroundColor: Brand.night,
+      foregroundColor: Brand.paper,
+      title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w500)),
       actions: [
         IconButton(
           tooltip: 'Compartilhar',

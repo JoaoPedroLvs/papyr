@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:papyr/main.dart' show tab;
 import 'package:papyr/scan/save_screen.dart';
 import 'package:papyr/scan/session.dart';
+import 'package:papyr/widgets/papyr_mark.dart';
 
 void main() {
   late List<MethodCall> calls;
@@ -74,6 +75,15 @@ void main() {
     expect(find.text('home'), findsOneWidget);
     expect(tab.value, 0);
     expect(calls.where((c) => c.method == 'list'), hasLength(1));
+  });
+
+  testWidgets('done shows the mark and Salvo', (t) async {
+    session.add(Photo('/c/CAP0.jpg'));
+    await open(t);
+    await tapAndRun(t, 'Salvar');
+    expect(find.text('Salvo'), findsOneWidget);
+    expect(find.byType(PapyrMark), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle_outline), findsNothing);
   });
 
   testWidgets('failure keeps the session, explains and retries', (t) async {

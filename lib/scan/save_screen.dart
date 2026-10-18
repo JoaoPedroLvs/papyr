@@ -7,6 +7,7 @@ import 'package:papyr/library.dart';
 import 'package:papyr/main.dart' show tab;
 import 'package:papyr/native.dart' as native;
 import 'package:papyr/pdf_writer.dart';
+import 'package:papyr/widgets/papyr_mark.dart';
 
 import 'crop_screen.dart';
 import 'session.dart';
@@ -188,16 +189,27 @@ class _SaveScreenState extends State<SaveScreen> {
         if (!didPop && _stage == _Stage.done) _finish();
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Salvar'), automaticallyImplyLeading: _stage != _Stage.processing),
+        // No backgroundColor: transparent reads as dark and would turn the status bar icons light on paper.
+        appBar: AppBar(automaticallyImplyLeading: _stage != _Stage.processing),
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: switch (_stage) {
-              _Stage.editing => _editing(),
-              _Stage.processing => _processing(),
-              _Stage.done => _done(),
-              _Stage.error => _failed(_error!),
-            },
+            child: _stage == _Stage.done
+                ? _done()
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Salvar', style: Theme.of(context).textTheme.headlineLarge),
+                      const SizedBox(height: 20),
+                      Expanded(
+                        child: switch (_stage) {
+                          _Stage.processing => _processing(),
+                          _Stage.error => _failed(_error!),
+                          _ => _editing(),
+                        },
+                      ),
+                    ],
+                  ),
           ),
         ),
       ),
@@ -246,9 +258,9 @@ class _SaveScreenState extends State<SaveScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Spacer(),
-        Icon(Icons.check_circle_outline, size: 72, color: Theme.of(context).colorScheme.primary),
+        const Center(child: PapyrMark(width: 72)),
         const SizedBox(height: 16),
-        Text('Salvo', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
+        Text('Salvo', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineMedium),
         const Spacer(),
         FilledButton.icon(
           onPressed: () => native.share(_uris, _mime),

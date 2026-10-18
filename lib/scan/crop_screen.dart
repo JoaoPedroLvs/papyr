@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:papyr/native.dart' as native;
+import 'package:papyr/theme.dart';
 
 import 'detector.dart';
 import 'save_screen.dart';
@@ -109,14 +110,17 @@ class _CropScreenState extends State<CropScreen> {
   @override
   Widget build(BuildContext context) {
     final photos = session.photos;
-    if (photos.isEmpty) return const Scaffold(backgroundColor: Colors.black);
+    if (photos.isEmpty) return const Scaffold(backgroundColor: Brand.night);
     final photo = photos[min(_i, photos.length - 1)];
+    final text = TextButton.styleFrom(foregroundColor: Brand.paper);
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Brand.night,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: photos.length > 1 ? Text('${_i + 1} de ${photos.length}') : null,
+        backgroundColor: Brand.night,
+        foregroundColor: Brand.paper,
+        title: photos.length > 1
+            ? Text('${_i + 1} de ${photos.length}', style: const TextStyle(fontWeight: FontWeight.w500))
+            : null,
       ),
       body: PageView.builder(
         controller: _pages,
@@ -141,24 +145,24 @@ class _CropScreenState extends State<CropScreen> {
             alignment: WrapAlignment.spaceEvenly,
             children: [
               TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                style: text,
                 onPressed: () => setState(() => photo.rotation = (photo.rotation + 90) % 360),
                 icon: const Icon(Icons.rotate_right),
                 label: const Text('Girar 90°'),
               ),
               TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                style: text,
                 onPressed: () => setState(() => photo.corners = null),
                 icon: const Icon(Icons.restart_alt),
                 label: const Text('Redefinir'),
               ),
               TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                style: text,
                 onPressed: () => _remove(photo),
                 icon: const Icon(Icons.delete_outline),
                 label: const Text('Remover foto'),
               ),
-              FilledButton(onPressed: _navigating ? null : _continue, child: const Text('Continuar')),
+              FilledButton(style: _paperButton, onPressed: _navigating ? null : _continue, child: const Text('Continuar')),
             ],
           ),
         ),
@@ -166,6 +170,9 @@ class _CropScreenState extends State<CropScreen> {
     );
   }
 }
+
+/// Paper fill with ink text, fixed in both themes (spec 7.4).
+final _paperButton = FilledButton.styleFrom(backgroundColor: Brand.paper, foregroundColor: Brand.navy);
 
 class _CropPage extends StatefulWidget {
   const _CropPage({super.key, required this.photo, required this.preview, required this.onChanged, required this.onRemove});
@@ -244,14 +251,14 @@ class _CropPageState extends State<_CropPage> with AutomaticKeepAliveClientMixin
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Não foi possível abrir esta foto.', style: TextStyle(color: Colors.white)),
+                const Text('Não foi possível abrir esta foto.', style: TextStyle(color: Brand.paper)),
                 const SizedBox(height: 16),
-                FilledButton(onPressed: widget.onRemove, child: const Text('Remover')),
+                FilledButton(style: _paperButton, onPressed: widget.onRemove, child: const Text('Remover')),
               ],
             ),
           );
         }
-        if (!s.hasData) return const Center(child: CircularProgressIndicator());
+        if (!s.hasData) return const Center(child: CircularProgressIndicator(color: Brand.paper));
         return LayoutBuilder(builder: (context, box) => _editor(s.data!, box.biggest));
       },
     );
@@ -327,7 +334,7 @@ class _CropPageState extends State<_CropPage> with AutomaticKeepAliveClientMixin
           size: const Size(2 * r, 2 * r),
           magnificationScale: 2,
           focalPointOffset: corner - center,
-          decoration: const MagnifierDecoration(shape: CircleBorder(side: BorderSide(color: Colors.white, width: 2))),
+          decoration: const MagnifierDecoration(shape: CircleBorder(side: BorderSide(color: Brand.paper, width: 2))),
         ),
       ),
     );
@@ -353,13 +360,13 @@ class _QuadPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final path = Path()..addPolygon(p, true);
-    canvas.drawPath(path, Paint()..color = const Color(0x3300E676));
+    canvas.drawPath(path, Paint()..color = Brand.green.withValues(alpha: 0.15));
     canvas.drawPath(
       path,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
-        ..color = const Color(0xFF00E676),
+        ..color = Brand.green,
     );
   }
 
@@ -381,8 +388,8 @@ class _Handle extends StatelessWidget {
           height: active ? 26 : 22,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: 0.3),
-            border: Border.all(color: const Color(0xFF00E676), width: 3),
+            color: Brand.paper.withValues(alpha: 0.3),
+            border: Border.all(color: Brand.green, width: 3),
           ),
         ),
       ),
