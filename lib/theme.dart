@@ -56,6 +56,7 @@ ThemeData papyrTheme(Brightness brightness) {
     colorScheme: s,
     fontFamily: 'Outfit',
     scaffoldBackgroundColor: s.surface,
+    iconTheme: IconThemeData(color: s.onSurface),
     textTheme: TextTheme(
       headlineLarge: serif(34, height: 1.05).copyWith(letterSpacing: -0.34),
       headlineMedium: serif(28, height: 1.1),

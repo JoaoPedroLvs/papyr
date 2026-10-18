@@ -44,6 +44,14 @@ void main() {
     expect(s.error, c(0xFFF2B8B5));
   });
 
+  // device check: the ⋮ menu and the Ajustes folder icons came out Material black87 / white
+  test('plain icons use ink, not the Material default', () {
+    for (final b in Brightness.values) {
+      final theme = papyrTheme(b);
+      expect(theme.iconTheme.color, theme.colorScheme.onSurface);
+    }
+  });
+
   test('titles use Newsreader at their own optical size; the rest is Outfit', () {
     final t = papyrTheme(Brightness.light);
     void serifAt(TextStyle? s, double size) {
